@@ -1,0 +1,33 @@
+stages:          # List of stages for jobs, and their order of execution
+  - publish
+
+publish-core:       # This job runs in the build stage, which runs first.
+  stage: publish
+  script:
+    - cd Scheduler.Core
+    - dotnet build -c=Release --source=$NUGET_SOURCE --source=https://api.nuget.org/v3/index.json
+    - dotnet nuget push bin/Release/*.nupkg -s $NUGET_SOURCE -k $NUGET_API_KEY --skip-duplicate
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "master"
+      changes:
+        - Scheduler.Core/*
+      when: always
+
+publish-master:
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  stage: publish
+  rules:
+  - if: $PUBLISH != null
+    when: always
+  script: 
+    - docker login $HARBOR_REGISTRY -u cicd -p $REGISTRY_PASS
+    - pwd
+    - appName=bx-scheduler-master
+    - tag=$(date "+%Y%m%d%H%M%S") # 当前时间为版本号
+    - host=harbor.bx.com.cn/bx # docker pull harbor.bx.com.cn/tgj/tgj-open:v1
+    - docker build . -t $host/$appName:$tag -f Dockerfile
+    - echo "=========上传镜像========="
+    - docker push $host/$appName:$tag
+    - echo "=========上传镜像 完毕========="
