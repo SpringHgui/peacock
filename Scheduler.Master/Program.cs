@@ -1,20 +1,20 @@
-using EasyAspNetCore.Extensions;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
-using Microsoft.Extensions.Hosting.WindowsServices;
+锘縰sing Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MQTTnet.Diagnostics;
+using Scheduler.Entity.Data;
 using Scheduler.Master.Extensions;
 using Scheduler.Master.Filters;
 using Scheduler.Master.Hubs;
 using Scheduler.Master.Models;
+using Scheduler.Master.Server;
 using Scheduler.Master.Services;
 using Serilog;
 using Serilog.Events;
-using System.Diagnostics;
 using System.Text.Json;
-using TimeCrontab;
 
 namespace Scheduler.Master
 {
@@ -22,55 +22,62 @@ namespace Scheduler.Master
     {
         public static void Main(string[] args)
         {
-            if (WindowsServiceHelpers.IsWindowsService())
-            {
-                // 调用 SetCurrentDirectory 并使用应用的发布位置路径。 
-                // 不要调用 GetCurrentDirectory 来获取路径，因为在调用 GetCurrentDirectory 时，Windows 服务应用将返回 C:\WINDOWS\system32 文件夹。 
-                // 有关详细信息，请参阅当前目录和内容根部分。 请先执行此步骤，然后再在 CreateWebHostBuilder 中配置应用。
-                var pathToExe = Process.GetCurrentProcess().MainModule.FileName;
-                var pathToContentRoot = Path.GetDirectoryName(pathToExe);
-                Directory.SetCurrentDirectory(pathToContentRoot);
-            }
+            const string outputTemplate = "[{Timestamp:HH:mm:ss} {RequestId} {Level:u3}] {Message:lj}{NewLine}{Exception}";
 
             var builder = WebApplication.CreateBuilder(args);
+            var configuration = builder.Configuration;
 
-            builder.AddEasyAspNetCore(new EasyAspNetCore.EasyAspNetCoreOption
+            builder.Services.AddSerilog((config) =>
             {
-                InvalidModelStateHandler = msg =>
-                {
-                    return new ResultData()
-                    {
-                        success = false,
-                        message = msg
-                    };
-                },
-                OnMessageReceived = async (message) =>
-                {
-                    message.Token = message.Request.Headers.Authorization.ToString();
-                    if (message.Token != null)
-                    {
-                        message.Token = message.Token.Replace("Bearer ", "");
-                    }
-
-                    await Task.CompletedTask;
-                },
-                OnChallenge = async (context) =>
-                {
-                    context.HandleResponse();
-                    context.Response.ContentType = "application/json;charset=utf-8";
-                    var msg = context.Error ?? "未登录";
-
-                    await context.Response.WriteAsync(JsonSerializer.Serialize(new ResultData
-                    {
-                        message = msg,
-                        success = false,
-                        trace_id = context.HttpContext.TraceIdentifier
-                    }));
-                },
-                DisNewtonsoftJson = true
+                config.MinimumLevel.Debug()
+                    .MinimumLevel.Override("Microsoft", LogEventLevel.Information) // Microsoft.Hosting.Lifetime
+                    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Error)
+                    .WriteTo.File("logs/.log", outputTemplate: outputTemplate, rollingInterval: RollingInterval.Hour, shared: true)
+                    .WriteTo.Console(outputTemplate: outputTemplate);
             });
 
+            builder.Services.AddAuthentication("Bearer").AddJwtBearer(delegate (JwtBearerOptions options)
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = false,
+                    ValidateAudience = false,
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.FromSeconds(Convert.ToInt32(configuration.GetSection("JWT")["ClockSkew"])),
+                    ValidateIssuerSigningKey = true,
+                    ValidAudience = configuration.GetSection("JWT")["ValidAudience"],
+                    ValidIssuer = configuration.GetSection("JWT")["ValidIssuer"],
+                    IssuerSigningKey = new SymmetricSecurityKey(Convert.FromBase64String(configuration.GetSection("JWT")["IssuerSigningKey"]))
+                };
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = async delegate (MessageReceivedContext message)
+                    {
+                        message.Token = message.Request.Headers.Authorization.ToString();
+                        if (message.Token != null)
+                        {
+                            message.Token = message.Token.Replace("Bearer ", "");
+                        }
 
+                        await Task.CompletedTask;
+                    },
+                    OnChallenge = async delegate (JwtBearerChallengeContext context)
+                    {
+                        context.HandleResponse();
+                        context.Response.ContentType = "application/json;charset=utf-8";
+                        var msg = context.Error ?? "未锟斤拷录";
+
+                        await context.Response.WriteAsync(JsonSerializer.Serialize(new ResultData
+                        {
+                            message = msg,
+                            success = false,
+                            trace_id = context.HttpContext.TraceIdentifier
+                        }));
+                    }
+                };
+            });
+
+            builder.Services.AddHealthChecks();
             builder.Services.AddAuthentication().AddMyAuthentication();
 
             // Add services to the container.
@@ -78,11 +85,12 @@ namespace Scheduler.Master
             {
                 options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
             });
+
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(options =>
             {
-                //添加Jwt验证设置,添加请求头信息
+                //锟斤拷锟斤拷Jwt锟斤拷证锟斤拷锟斤拷,锟斤拷锟斤拷锟斤拷锟斤拷头锟斤拷息
                 options.AddSecurityRequirement(new OpenApiSecurityRequirement
                 {
                     {
@@ -98,11 +106,11 @@ namespace Scheduler.Master
                     }
                 });
 
-                options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
                 {
                     Description = "Value Bearer {token}",
-                    Name = "Authorization",//jwt默认的参数名称
-                    In = ParameterLocation.Header,//jwt默认存放Authorization信息的位置(请求头中)
+                    Name = "Authorization",//jwt默锟较的诧拷锟斤拷锟斤拷锟斤拷
+                    In = ParameterLocation.Header,//jwt默锟较达拷锟紸uthorization锟斤拷息锟斤拷位锟斤拷(锟斤拷锟斤拷头锟斤拷)
                     Type = SecuritySchemeType.ApiKey
                 });
             });
@@ -113,7 +121,7 @@ namespace Scheduler.Master
                 options.EnableDetailedErrors = true;
                 options.MaximumParallelInvocationsPerClient = 100;
             })
-            //.AddStackExchangeRedis() // TODO：横向扩展
+            //.AddStackExchangeRedis() // TODO锟斤拷锟斤拷锟斤拷锟斤拷展
             .AddJsonProtocol(options =>
             {
                 options.PayloadSerializerOptions.PropertyNamingPolicy = null;
@@ -123,14 +131,16 @@ namespace Scheduler.Master
                 hubOptions.MaximumReceiveMessageSize = null;
             });
 
-            builder.Services.AddSingleton<ExcuteJobHandler>();
+            builder.Services.AddSingleton<IMqttNetLogger, MyLog>();
+            builder.Services.AddSingleton<IDiscovery, DiscoveryFromDb>();
+            builder.Services.AddSingleton<ExcuteJobHandler>();   
             builder.Services.AddSingleton<SchedulerSystem>();
+            builder.Services.AddSingleton<SchedulerHostedService>();
             builder.Services.AddHostedService<SchedulerHostedService>();
+            builder.Services.AddHostedService<MqttServerService>();
             builder.Services.AddSingleton<CustomExceptionFilterAttribute>();
-            builder.Host.UseWindowsService(options =>
-                     {
-                         options.ServiceName = "BXScheduler.Master";
-                     });
+
+            builder.Services.AddCors();
 
             var app = builder.Build();
 
@@ -141,10 +151,26 @@ namespace Scheduler.Master
                 app.UseSwaggerUI();
             }
 
+            using (var scope = app.Services.CreateScope())
+            {
+                var services = scope.ServiceProvider;
+
+                var context = services.GetRequiredService<BxjobContext>();
+                context.Database.EnsureCreated();
+            }
+
             app.UseStaticFiles();
             app.UseVueRouterHistory();
 
-            app.UseEasyAspNetCore();
+            app.MapHealthChecks("/healthz");
+
+            app.UseAuthentication();
+            app.UseAuthorization();
+
+            app.UseCors(policy =>
+            {
+                policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+            });
 
             app.MapHub<JobExecutorHub>("/hubs/executor", options =>
             {

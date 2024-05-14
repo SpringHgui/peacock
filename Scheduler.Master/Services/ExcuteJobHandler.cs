@@ -1,5 +1,4 @@
 ﻿using BX.Utility.Helper;
-using Confluent.Kafka;
 using Microsoft.AspNetCore.SignalR;
 using Mysqlx.Prepare;
 using MySqlX.XDevAPI;

@@ -61,7 +61,6 @@ namespace Scheduler.Master.Services
             {
                 try
                 {
-
                     if (hashedWheelTimer != null)
                         hashedWheelTimer.StopAsync().Wait();
 
@@ -70,7 +69,7 @@ namespace Scheduler.Master.Services
                     using var scope = service.CreateScope();
 
                     var jobService = scope.ServiceProvider.GetRequiredService<JobService>();
-                    var jobs = jobService.ListNextJobs();
+                    var jobs = jobService.ListJobs(1, 1000, null, out _);
 
                     foreach (var item in jobs)
                     {
