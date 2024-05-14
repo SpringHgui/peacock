@@ -1,9 +1,10 @@
 ﻿using MQTTnet.Diagnostics;
 using Serilog;
+using System;
 
-namespace Scheduler.Master.Server
+namespace Scheduler.Core.Services
 {
-    class MyLog : IMqttNetLogger
+    public class MyLog : IMqttNetLogger
     {
         public bool IsEnabled => true;
 
@@ -27,5 +28,6 @@ namespace Scheduler.Master.Server
                     break;
             }
         }
+
     }
 }

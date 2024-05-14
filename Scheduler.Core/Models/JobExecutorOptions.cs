@@ -10,7 +10,7 @@ namespace Scheduler.Core.Models
     public class JobExecutorOptions
     {
         [Required]
-        public string Addr { get; set; }
+        public string[] Addr { get; set; }
 
         public string? ClientId { get; set; }
 

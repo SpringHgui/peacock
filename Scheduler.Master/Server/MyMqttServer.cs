@@ -221,24 +221,25 @@ namespace Scheduler.Master.Server
 
             try
             {
-                if (times % 1 == 0)
+                // 心跳写入数据库
+                discovery.Register(new MqttNode
                 {
-                    // 心跳写入数据库
-                    discovery.Register(new MqttNode
-                    {
-                        Guid = this.guid,
-                        Endpoint = this.ExternalUrl,
-                    });
-                }
-                else if (times % 2 == 0)
+                    Guid = this.guid,
+                    Endpoint = this.ExternalUrl,
+                });
+
+                if (times % 2 == 0)
                 {
                     // 服务发现
                     var res = discovery.Discover();
+
+                    Console.WriteLine(JsonConvert.SerializeObject(res));
 
                     res = res.Where(x => x.Guid != guid);
 
                     var newNodes = res.Where(x => !clusterSubscribers.Select(x => x.Guid).Contains(x.Guid));
                     var missNodes = clusterSubscribers.Where(x => !res.Select(x => x.Guid).Contains(x.Guid));
+
                     foreach (var item in missNodes)
                     {
                         await item.StopAsync();
@@ -252,11 +253,11 @@ namespace Scheduler.Master.Server
                         sub.StartAsync();
                     }
 
-                    Console.WriteLine(JsonConvert.SerializeObject(res));
                 }
             }
             catch (Exception ex)
             {
+                Console.WriteLine(ex.ToString());
                 logger.Publish(MqttNetLogLevel.Error, nameof(MyMqttServer), ex.Message, null, ex);
             }
             finally

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using MQTTnet.Diagnostics;
 using Scheduler.Core.Executor;
 using Scheduler.Core.Models;
 using Scheduler.Core.Services;
@@ -20,6 +21,7 @@ namespace Scheduler.Core.Extensions
             SchedulerConfig.Invoke(config);
 
             services.AddSingleton(config);
+            services.AddSingleton<IMqttNetLogger, MyLog>();
             services.AddSingleton<JobExecutor>();
             services.AddHostedService<Worker>();
             services.AddOptions<JobExecutorOptions>()

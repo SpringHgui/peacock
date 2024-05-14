@@ -19,7 +19,8 @@ namespace Scheduler.Service
         public IEnumerable<ScServer> GetServerOnline(int heart)
         {
             var time = DateTime.Now.AddSeconds(-heart).ToTimestamp();
-            return DBContext.ScServers.Where(x => x.HeartAt > time);
+            Console.Write(time);
+            return DBContext.ScServers.Where(x => x.HeartAt > time).ToList();
         }
 
         public void RegisterOrUpdate(ScServer mqttNode)

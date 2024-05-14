@@ -9,10 +9,12 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
-using System.Xml.Linq;
-using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using MQTTnet;
+using MQTTnet.Client;
+using MQTTnet.Diagnostics;
+using MQTTnet.Server;
 using Polly;
 using Scheduler.Core.Handlers;
 using Scheduler.Core.Models;
@@ -23,17 +25,19 @@ namespace Scheduler.Core.Executor
     public class JobExecutor : IJobExecutor
     {
         ILogger<JobExecutor> logger;
-        HubConnection connection;
+        IMqttClient client;
         IServiceProvider serviceProvider;
         JobExecutorOptions schedulerOptions;
         SchedulerConfig schedulerConfig;
         ConcurrentQueue<OnJob> jobsQueue = new ConcurrentQueue<OnJob>();
-
+        MqttClientOptions clientOptions;
+        string willTopic => $"sys/client/offline/{ClientId}";
+        string ClientId;
         System.Timers.Timer timer;
         public JobExecutor(
             ILogger<JobExecutor> logger,
             IOptions<JobExecutorOptions> options,
-            SchedulerConfig schedulerConfig,
+            SchedulerConfig schedulerConfig, IMqttNetLogger mqttNetLogger,
             IServiceProvider serviceProvider)
         {
             this.schedulerConfig = schedulerConfig;
@@ -46,64 +50,70 @@ namespace Scheduler.Core.Executor
             timer.Interval = 1000;
             timer.Start();
 
-            connection = new HubConnectionBuilder()
-            .WithUrl(schedulerOptions.Addr, options =>
-            {
-                options.Headers.Add(ConstString.HEADER_CLIENT_ID, $"{Environment.MachineName}@{Guid.NewGuid().ToString()}");
-                options.Headers.Add(ConstString.HEADER_GROUP_NAME, schedulerOptions.GroupName);
-                options.Headers.Add(ConstString.HEADER_TOKEN, schedulerOptions.Token);
-            })
-            //.WithAutomaticReconnect() // 自动重连4次，失败后触发 Closed
-            .ConfigureLogging(logging =>
-            {
-                logging.SetMinimumLevel(LogLevel.Information);
-                logging.AddConsole();
-            })
-            .Build();
+            var factory = new MqttFactory(mqttNetLogger);
 
-            connection.Closed += async (ex) =>
+            ClientId = Guid.NewGuid().ToString();
+            clientOptions = new MqttClientOptions
             {
-                logger.LogError(ex, "[JobExecutor][连接关闭] 5s后重试");
-                ConnectWithRetryAsync(cancellationToken).Wait();
+                KeepAlivePeriod = TimeSpan.FromSeconds(10),
+                ProtocolVersion = MQTTnet.Formatter.MqttProtocolVersion.V500,
+                ClientId = ClientId,
+                ChannelOptions = new MqttClientTcpOptions // new MqttClientWebSocketOptions { Uri = server };
+                {
+                    Port = int.Parse(schedulerOptions.Addr.First().Split(':')[1]),
+                    Server = schedulerOptions.Addr.First().Split(':')[0]
+                },
+                // TODO: 账号通过算法生产
+                Credentials = new MqttClientCredentials("", Encoding.UTF8.GetBytes("")),
+                WillTopic = willTopic,
+                WillDelayInterval = 5,
+                WillPayload = Encoding.UTF8.GetBytes($"Offline"),
             };
 
-            connection.Reconnecting += error =>
+            client = factory.CreateMqttClient();
+
+            client.ApplicationMessageReceivedAsync += e =>
             {
-                // Notify users the connection was lost and the client is reconnecting.
-                // Start queuing or dropping messages.
-                logger.LogInformation("[JobExecutor][Reconnecting]");
+                var payloadText = string.Empty;
+                if (e.ApplicationMessage.PayloadSegment.Count > 0)
+                {
+                    payloadText = Encoding.UTF8.GetString(
+                        e.ApplicationMessage.PayloadSegment.Array,
+                        e.ApplicationMessage.PayloadSegment.Offset,
+                        e.ApplicationMessage.PayloadSegment.Count);
+                }
+
+                Console.WriteLine("### RECEIVED APPLICATION MESSAGE ###");
+                Console.WriteLine($"+ Topic = {e.ApplicationMessage.Topic}");
+                Console.WriteLine($"+ Payload = {payloadText}");
+                Console.WriteLine($"+ QoS = {e.ApplicationMessage.QualityOfServiceLevel}");
+                Console.WriteLine($"+ Retain = {e.ApplicationMessage.Retain}");
+                Console.WriteLine();
+
                 return Task.CompletedTask;
             };
 
-            connection.On<OnJob>(nameof(OnJob), (msg) =>
+            client.ConnectedAsync += async e =>
             {
-                using var _ = LogContext.PushProperty("RequestId", $"ExecuteTask:{msg.Job.TaskId}");
+                await client.SubscribeAsync($"sys/client/{ClientId}");
 
-                logger.LogInformation($"[OnJob] Onjob {JsonSerializer.Serialize(msg)}");
-                jobsQueue.Enqueue(msg);
-                logger.LogInformation($"当前待处理: {jobsQueue.Count}");
-            });
+                Console.WriteLine($"[{ClientId}] 连接成功");
+            };
 
-            connection.On<OnInvoke>(nameof(OnInvoke), (msg) =>
+            client.DisconnectedAsync += async e =>
             {
-                switch (msg.ApiName)
+                Console.WriteLine("### DISCONNECTED FROM SERVER ###");
+                await Task.Delay(TimeSpan.FromSeconds(5));
+
+                try
                 {
-                    case "ExecutingJobs":
-                        msg.Data = JsonSerializer.Serialize(ExecutingJobs.Select(x => new ExecutingJobsResponse
-                        {
-                            Content = x.Job.Content,
-                            Name = x.Job.Name,
-                            JobId = x.Job.JobId
-                        }).ToArray());
-
-                        connection.SendAsync(nameof(OnInvoke), msg);
-                        break;
-                    default:
-                        break;
+                    await client.ConnectAsync(clientOptions);
                 }
-
-                logger.LogInformation($"[OnInvok]: {JsonSerializer.Serialize(msg)}");
-            });
+                catch
+                {
+                    Console.WriteLine("### RECONNECTING FAILED ###");
+                }
+            };
         }
 
         private void Timer_Elapsed(object sender, ElapsedEventArgs e)
@@ -120,10 +130,8 @@ namespace Scheduler.Core.Executor
                 {
                     using var _ = LogContext.PushProperty("RequestId", $"ExecuteTask:{job.Job.TaskId}");
                     logger.LogInformation($"任务出队: {job.Job.TaskId}");
-                    Task.Run(() =>
-                    {
-                        ExecuteAsync(job);
-                    });
+
+                    ExecuteAsync(job);
                 }
             }
             catch (Exception ex)
@@ -152,7 +160,7 @@ namespace Scheduler.Core.Executor
         /// <param name="job"></param>
         /// <returns></returns>
         /// <exception cref="Exception"></exception>
-        public void ExecuteAsync(OnJob msg)
+        public async Task ExecuteAsync(OnJob msg)
         {
             var job = msg.Job;
 
@@ -209,7 +217,13 @@ namespace Scheduler.Core.Executor
                 ExecutingJobs.Remove(msg);
             }
 
-            connection.SendAsync(nameof(OnJob), msg);
+            var message = new MqttApplicationMessageBuilder()
+                .WithTopic("MyTopic")
+                .WithPayload(JsonSerializer.Serialize(msg))
+                .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
+                .WithRetainFlag().Build();
+
+            var res = await client.PublishAsync(message, CancellationToken.None);
         }
 
         CancellationToken cancellationToken;
@@ -234,41 +248,15 @@ namespace Scheduler.Core.Executor
         /// <param name="token"></param>
         /// <returns></returns>
         /// <exception cref="ArgumentNullException"></exception>
-        public async Task<bool> ConnectWithRetryAsync(CancellationToken token)
+        public async Task ConnectWithRetryAsync(CancellationToken token)
         {
-            if (connection == null)
+            try
             {
-                throw new ArgumentNullException(nameof(connection));
+                await client.ConnectAsync(clientOptions, token);
             }
-
-            // Keep trying to until we can start or the token is canceled.
-            while (true)
+            catch (Exception ex)
             {
-                try
-                {
-                    // 开始连接
-                    logger.LogInformation("[开始连接]");
-                    await connection.StartAsync(token);
-                    Debug.Assert(connection.State == HubConnectionState.Connected);
-
-                    logger.LogInformation("[连接成功]");
-
-                    // 发送当前客户端支持的IjobHandler
-                    await connection.SendAsync("SyncHandlers", schedulerConfig.jobs.Select(x => x.Key));
-                    return true;
-                }
-                catch when (token.IsCancellationRequested)
-                {
-                    logger.LogError("[Connect Stop because CancellationRequested]");
-                    return false;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogInformation($"[连接失败] {ex.Message} trying again in 5000 ms");
-
-                    Debug.Assert(connection.State == HubConnectionState.Disconnected);
-                    await Task.Delay(5000);
-                }
+                logger.LogError(ex, "连接失败");
             }
         }
     }

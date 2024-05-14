@@ -11,7 +11,7 @@ namespace Scheduler.Core.Executor
 {
     public interface IJobExecutor
     {
-        void ExecuteAsync(OnJob job);
+        Task ExecuteAsync(OnJob job);
 
         Task RunAsync(CancellationToken cancellationToken);
     }

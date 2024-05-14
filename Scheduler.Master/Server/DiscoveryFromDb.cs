@@ -18,7 +18,7 @@ namespace Scheduler.Master.Server
             using var scope = this.service.CreateScope();
             var serverService = scope.ServiceProvider.GetRequiredService<ServerService>();
 
-            var list = serverService.GetServerOnline(10);
+            var list = serverService.GetServerOnline(15);
 
             return list.Select(x => new MqttNode
             {

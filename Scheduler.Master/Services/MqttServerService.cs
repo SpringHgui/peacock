@@ -10,7 +10,7 @@ namespace Scheduler.Master.Services
 
         public MyMqttServer myMqttServer { get; }
 
-        public MqttServerService(IServiceProvider service, IMqttNetLogger mqttNetLogger)
+        public MqttServerService(IDiscovery discovery, IMqttNetLogger mqttNetLogger)
         {
             this.mqttNetLogger = mqttNetLogger;
 
@@ -18,9 +18,6 @@ namespace Scheduler.Master.Services
             IPHostEntry ipEntry = Dns.GetHostEntry(Dns.GetHostName());
             IPAddress[] addr = ipEntry.AddressList.Where(x => x.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork).ToArray();
             strHostName = addr.First().ToString();
-
-            using var scope = service.CreateScope();
-            var discovery = scope.ServiceProvider.GetRequiredService<IDiscovery>();
 
             myMqttServer = new MyMqttServer(new MyMqttServerOptions
             {
