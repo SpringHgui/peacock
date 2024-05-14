@@ -17,15 +17,15 @@ namespace Scheduler.Master.Controllers
         }
 
         [HttpGet]
-        public ResultData GetOnlineExecutor()
+        public ResultData GetOnlineExecutor([FromServices] ServerSystem mqttServer)
         {
-            //ResultData.data = Global.OnlineUsers.Select(x => new
-            //{
-            //    StartTime = x.StartTime.ToString("yyyy-MM-dd HH:mm:ss"),
-            //    x.ClientId,
-            //    x.GroupName,
-            //    x.Handelrs
-            //});
+            ResultData.data = mqttServer.myMqttServer.OnlineUsers.Select(x => new
+            {
+                StartTime = x.StartTime.ToString("yyyy-MM-dd HH:mm:ss"),
+                x.ClientId,
+                x.GroupName,
+                x.Handelrs
+            });
             return ResultData;
         }
     }

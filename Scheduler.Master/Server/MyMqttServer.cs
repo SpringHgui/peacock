@@ -3,11 +3,11 @@ using MQTTnet;
 using MQTTnet.Internal;
 using System.Text;
 using MQTTnet.Protocol;
-using Microsoft.Extensions.Logging;
 using System.Timers;
 using MQTTnet.Diagnostics;
-using System.Text.Json;
 using Newtonsoft.Json;
+using Scheduler.Master.Models;
+using System.Collections.Concurrent;
 
 namespace Scheduler.Master.Server
 {
@@ -22,6 +22,8 @@ namespace Scheduler.Master.Server
 
         IEnumerable<MqttNode> mqttNodes;
         int times = 0;
+
+        public ConcurrentBag<ExecutorClient> OnlineUsers = new ConcurrentBag<ExecutorClient>();
 
         public MyMqttServer(MyMqttServerOptions options, IDiscovery discovery, IMqttNetLogger logger)
         {
@@ -116,6 +118,9 @@ namespace Scheduler.Master.Server
                     return CompletedTask.Instance;
                 };
 
+                mqttServer.ClientConnectedAsync += MqttServer_ClientConnectedAsync;
+                mqttServer.ClientDisconnectedAsync += MqttServer_ClientDisconnectedAsync;
+
                 // 连接检查
                 mqttServer.ValidatingConnectionAsync += e =>
                 {
@@ -197,6 +202,28 @@ namespace Scheduler.Master.Server
             {
                 Console.WriteLine(e);
             }
+        }
+
+        private Task MqttServer_ClientDisconnectedAsync(ClientDisconnectedEventArgs arg)
+        {
+            var clinet = OnlineUsers.FirstOrDefault(x => x.ClientId == arg.ClientId);
+            if (clinet != null)
+            {
+                OnlineUsers.TryTake(out clinet);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private Task MqttServer_ClientConnectedAsync(ClientConnectedEventArgs arg)
+        {
+            OnlineUsers.Add(new ExecutorClient()
+            {
+                ClientId = arg.ClientId,
+                GroupName = arg.UserProperties.Where(x => x.Name == "GroupName").FirstOrDefault().Value,
+                StartTime = DateTime.Now,
+            });
+            return Task.CompletedTask;
         }
 
         public async Task StopAsync()

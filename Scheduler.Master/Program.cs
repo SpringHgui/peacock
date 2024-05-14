@@ -65,7 +65,7 @@ namespace Scheduler.Master
                     {
                         context.HandleResponse();
                         context.Response.ContentType = "application/json;charset=utf-8";
-                        var msg = context.Error ?? "δ��¼";
+                        var msg = context.Error ?? "未登录";
 
                         await context.Response.WriteAsync(JsonSerializer.Serialize(new ResultData
                         {
@@ -135,7 +135,8 @@ namespace Scheduler.Master
             builder.Services.AddSingleton<IDiscovery, DiscoveryFromDb>();
             builder.Services.AddSingleton<ExcuteJobHandler>();
             builder.Services.AddSingleton<SchedulerSystem>();
- 
+
+            builder.Services.AddSingleton<ServerSystem>();
             builder.Services.AddHostedService<MqttServerService>();
             builder.Services.AddSingleton<CustomExceptionFilterAttribute>();
             builder.Services.AddSingleton<HubContext>();

@@ -63,8 +63,11 @@ namespace Scheduler.Core.Executor
                     Port = int.Parse(schedulerOptions.Addr.First().Split(':')[1]),
                     Server = schedulerOptions.Addr.First().Split(':')[0]
                 },
+                UserProperties = new List<MQTTnet.Packets.MqttUserProperty>() {
+                    new MQTTnet.Packets.MqttUserProperty("GroupName", schedulerOptions.GroupName)
+                },
                 // TODO: 账号通过算法生产
-                Credentials = new MqttClientCredentials("", Encoding.UTF8.GetBytes("")),
+                //Credentials = new MqttClientCredentials("", Encoding.UTF8.GetBytes(schedulerOptions.Token)),
                 WillTopic = willTopic,
                 WillDelayInterval = 5,
                 WillPayload = Encoding.UTF8.GetBytes($"Offline"),
