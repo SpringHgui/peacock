@@ -5,7 +5,6 @@ using MySqlX.XDevAPI;
 using MySqlX.XDevAPI.Common;
 using Scheduler.Core.Models;
 using Scheduler.Entity.Models;
-using Scheduler.Master.Hubs;
 using Scheduler.Master.Models;
 using Scheduler.Service;
 using System.CodeDom.Compiler;
@@ -22,7 +21,7 @@ namespace Scheduler.Master.Services
         IServiceProvider service;
 
         public ExcuteJobHandler(
-            ILogger<ExcuteJobHandler> logger, IHubContext<JobExecutorHub> hubContext,
+            ILogger<ExcuteJobHandler> logger, IHostedService<JobExecutorHub> hubContext,
             IServiceProvider service)
         {
             this.logger = logger;
