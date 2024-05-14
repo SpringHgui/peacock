@@ -17,5 +17,10 @@
         {
             Servers.Add(myMqttServer);
         }
+
+        public void Register(MqttNode mqttNode)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

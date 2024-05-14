@@ -132,13 +132,12 @@ namespace Scheduler.Master
 
             builder.Services.AddSingleton<IMqttNetLogger, MyLog>();
             builder.Services.AddSingleton<IDiscovery, DiscoveryFromDb>();
-            builder.Services.AddSingleton<ExcuteJobHandler>();   
+            builder.Services.AddSingleton<ExcuteJobHandler>();
             builder.Services.AddSingleton<SchedulerSystem>();
-            builder.Services.AddSingleton<SchedulerHostedService>();
-            builder.Services.AddHostedService<SchedulerHostedService>();
+ 
             builder.Services.AddHostedService<MqttServerService>();
             builder.Services.AddSingleton<CustomExceptionFilterAttribute>();
-
+            builder.Services.AddSingleton<HubContext>();
             builder.Services.AddCors();
 
             var app = builder.Build();

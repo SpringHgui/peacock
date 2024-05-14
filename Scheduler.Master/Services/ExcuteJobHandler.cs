@@ -5,7 +5,9 @@ using MySqlX.XDevAPI;
 using MySqlX.XDevAPI.Common;
 using Scheduler.Core.Models;
 using Scheduler.Entity.Models;
+using Scheduler.Master.Hubs;
 using Scheduler.Master.Models;
+using Scheduler.Master.Server;
 using Scheduler.Service;
 using System.CodeDom.Compiler;
 using System.Collections.Concurrent;
@@ -17,11 +19,11 @@ namespace Scheduler.Master.Services
     public class ExcuteJobHandler
     {
         ILogger<ExcuteJobHandler> logger;
-        IHubContext<JobExecutorHub> hubContext;
+        HubContext hubContext;
         IServiceProvider service;
 
         public ExcuteJobHandler(
-            ILogger<ExcuteJobHandler> logger, IHostedService<JobExecutorHub> hubContext,
+            ILogger<ExcuteJobHandler> logger, HubContext hubContext,
             IServiceProvider service)
         {
             this.logger = logger;
@@ -80,7 +82,7 @@ namespace Scheduler.Master.Services
 
                         try
                         {
-                            var clinet = hubContext.Clients.Client(groupClient.ConnectionId);
+                            var clinet = hubContext.GetClient(groupClient.ConnectionId);
                             await clinet.SendAsync(nameof(OnInvoke), new OnInvoke
                             {
                                 InvokeId = id,
@@ -131,7 +133,7 @@ namespace Scheduler.Master.Services
                 {
                     task.ClientId = executor.ClientId;
 
-                    var clinet = hubContext.Clients.Client(executor.ConnectionId);
+                    var clinet = hubContext.GetClient(executor.ConnectionId);
                     if (clinet == null)
                     {
                         var result = $"ConnectionId: [{executor.ConnectionId}] 竟然不在线";

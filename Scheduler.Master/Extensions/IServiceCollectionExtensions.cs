@@ -22,6 +22,7 @@ namespace Scheduler.Master.Extensions
 
             services.AddHostedService<SchedulerHostedService>();
 
+            services.AddTransient<ServerService>();
             services.AddTransient<TaskService>();
             services.AddTransient<JobService>();
             services.AddTransient<UserService>();

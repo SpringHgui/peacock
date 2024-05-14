@@ -16,6 +16,8 @@ public partial class BxjobContext : DbContext
 
     public virtual DbSet<ScNode> ScNodes { get; set; }
 
+    public virtual DbSet<ScServer> ScServers { get; set; }
+
     public virtual DbSet<ScTask> ScTasks { get; set; }
 
     public virtual DbSet<ScUser> ScUsers { get; set; }
@@ -34,68 +36,45 @@ public partial class BxjobContext : DbContext
             entity.Property(e => e.AlarmContent)
                 .HasMaxLength(255)
                 .HasDefaultValueSql("''")
-                .HasComment("报警配置")
                 .HasColumnName("alarm_content");
-            entity.Property(e => e.AlarmType)
-                .HasComment("0:关闭 1:企业微信机器人")
-                .HasColumnName("alarm_type");
-            entity.Property(e => e.AttemptInterval)
-                .HasComment("失败尝试间隔")
-                .HasColumnName("attempt_interval");
+            entity.Property(e => e.AlarmType).HasColumnName("alarm_type");
+            entity.Property(e => e.AttemptInterval).HasColumnName("attempt_interval");
             entity.Property(e => e.Content)
                 .HasMaxLength(255)
                 .HasDefaultValueSql("''")
-                .HasComment("任务handler描述")
                 .HasColumnName("content");
             entity.Property(e => e.Description)
                 .HasMaxLength(255)
                 .HasDefaultValueSql("''")
-                .HasComment("任务描述")
                 .HasColumnName("description");
-            entity.Property(e => e.Enabled)
-                .HasComment("是否启用")
-                .HasColumnName("enabled");
+            entity.Property(e => e.Enabled).HasColumnName("enabled");
             entity.Property(e => e.ExecuteMode)
                 .HasMaxLength(16)
                 .HasDefaultValueSql("'alone'")
-                .HasComment("执行模式 alone: 单机 sphere:分片")
                 .HasColumnName("execute_mode");
             entity.Property(e => e.GroupName)
                 .HasMaxLength(128)
                 .HasDefaultValueSql("''")
-                .HasComment("分组名")
                 .HasColumnName("group_name");
             entity.Property(e => e.JobParams)
                 .HasMaxLength(512)
                 .HasDefaultValueSql("''")
-                .HasComment("任务参数")
                 .HasColumnName("job_params");
-            entity.Property(e => e.MaxAttempt)
-                .HasComment("失败尝试次数")
-                .HasColumnName("max_attempt");
-            entity.Property(e => e.MaxThread)
-                .HasComment("并发线程限制")
-                .HasColumnName("max_thread");
+            entity.Property(e => e.MaxAttempt).HasColumnName("max_attempt");
+            entity.Property(e => e.MaxThread).HasColumnName("max_thread");
             entity.Property(e => e.Name)
                 .HasMaxLength(128)
                 .HasDefaultValueSql("''")
-                .HasComment("任务名")
                 .HasColumnName("name");
-            entity.Property(e => e.NextTriggerTime)
-                .HasComment("下次执行时间")
-                .HasColumnName("next_trigger_time");
-            entity.Property(e => e.ThreadCount)
-                .HasComment("并行数")
-                .HasColumnName("thread_count");
+            entity.Property(e => e.NextTriggerTime).HasColumnName("next_trigger_time");
+            entity.Property(e => e.ThreadCount).HasColumnName("thread_count");
             entity.Property(e => e.TimeExpression)
                 .HasMaxLength(64)
                 .HasDefaultValueSql("''")
-                .HasComment("时间表达式")
                 .HasColumnName("time_expression");
             entity.Property(e => e.TimeType)
                 .HasMaxLength(16)
                 .HasDefaultValueSql("''")
-                .HasComment("时间类型")
                 .HasColumnName("time_type");
         });
 
@@ -116,6 +95,21 @@ public partial class BxjobContext : DbContext
                 .HasColumnName("slot");
         });
 
+        modelBuilder.Entity<ScServer>(entity =>
+        {
+            entity.HasKey(e => e.Guid).HasName("PRIMARY");
+
+            entity.ToTable("sc_server");
+
+            entity.Property(e => e.Guid)
+                .HasMaxLength(64)
+                .HasColumnName("guid");
+            entity.Property(e => e.EndPoint)
+                .HasMaxLength(64)
+                .HasColumnName("end_point");
+            entity.Property(e => e.HeartAt).HasColumnName("heart_at");
+        });
+
         modelBuilder.Entity<ScTask>(entity =>
         {
             entity.HasKey(e => e.TaskId).HasName("PRIMARY");
@@ -124,36 +118,24 @@ public partial class BxjobContext : DbContext
 
             entity.HasIndex(e => e.JobId, "job_id");
 
-            entity.Property(e => e.TaskId)
-                .HasComment("调度实例编号")
-                .HasColumnName("task_id");
+            entity.Property(e => e.TaskId).HasColumnName("task_id");
             entity.Property(e => e.ClientId)
                 .HasMaxLength(128)
                 .HasDefaultValueSql("''")
-                .HasComment("执行客户端id")
                 .HasColumnName("client_id");
             entity.Property(e => e.EndTime)
-                .HasComment("调度结束时间")
                 .HasColumnType("datetime")
                 .HasColumnName("end_time");
-            entity.Property(e => e.Flags)
-                .HasComment("flags")
-                .HasColumnName("flags");
-            entity.Property(e => e.JobId)
-                .HasComment("任务编号")
-                .HasColumnName("job_id");
+            entity.Property(e => e.Flags).HasColumnName("flags");
+            entity.Property(e => e.JobId).HasColumnName("job_id");
             entity.Property(e => e.Result)
                 .HasMaxLength(255)
                 .HasDefaultValueSql("''")
-                .HasComment("结果")
                 .HasColumnName("result");
             entity.Property(e => e.StartTime)
-                .HasComment("调度开始时间")
                 .HasColumnType("datetime")
                 .HasColumnName("start_time");
-            entity.Property(e => e.Status)
-                .HasComment("状态 0:未执行 1:执行中 2:成功 3:失败")
-                .HasColumnName("status");
+            entity.Property(e => e.Status).HasColumnName("status");
         });
 
         modelBuilder.Entity<ScUser>(entity =>

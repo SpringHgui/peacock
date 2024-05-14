@@ -3,5 +3,7 @@
     public interface IDiscovery
     {
         public IEnumerable<MqttNode> Discover();
+
+        public void Register(MqttNode mqttNode);
     }
 }

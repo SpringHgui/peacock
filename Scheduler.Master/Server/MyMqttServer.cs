@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using System.Timers;
 using MQTTnet.Diagnostics;
 using System.Text.Json;
+using Newtonsoft.Json;
 
 namespace Scheduler.Master.Server
 {
@@ -20,6 +21,7 @@ namespace Scheduler.Master.Server
         IMqttNetLogger logger;
 
         IEnumerable<MqttNode> mqttNodes;
+        int times = 0;
 
         public MyMqttServer(MyMqttServerOptions options, IDiscovery discovery, IMqttNetLogger logger)
         {
@@ -28,7 +30,7 @@ namespace Scheduler.Master.Server
             this.discovery = discovery ?? throw new ArgumentNullException(nameof(discovery));
 
             discoveryTimer = new System.Timers.Timer();
-            discoveryTimer.Interval = 10000;
+            discoveryTimer.Interval = 5000;
             discoveryTimer.Elapsed += discoveryTimerElapsed;
 
             try
@@ -53,7 +55,7 @@ namespace Scheduler.Master.Server
                 mqttServer = new MqttFactory().CreateMqttServer(mqttServerOptions, logger);
 
                 const string Filename = "C:\\MQTT\\RetainedMessages.json";
- 
+
                 mqttServer.RetainedMessageChangedAsync += e =>
                 {
                     Console.Write($"[RetainedMessage] {e.StoredRetainedMessages}");
@@ -64,7 +66,7 @@ namespace Scheduler.Master.Server
                         Directory.CreateDirectory(directory);
                     }
 
-                    File.WriteAllText(Filename, JsonSerializer.Serialize(e.StoredRetainedMessages));
+                    File.WriteAllText(Filename, JsonConvert.SerializeObject(e.StoredRetainedMessages));
                     return CompletedTask.Instance;
                 };
 
@@ -78,11 +80,11 @@ namespace Scheduler.Master.Server
                 mqttServer.LoadingRetainedMessageAsync += e =>
                 {
                     Console.Write($"[LoadingRetainedMessage]");
-                    List<MqttApplicationMessage> retainedMessages;
+                    List<MqttApplicationMessage> retainedMessages = new List<MqttApplicationMessage>();
                     if (File.Exists(Filename))
                     {
                         var json = File.ReadAllText(Filename);
-                        retainedMessages = JsonSerializer.Deserialize<List<MqttApplicationMessage>>(json);
+                        retainedMessages = JsonConvert.DeserializeObject<List<MqttApplicationMessage>>(json);
                     }
                     else
                     {
@@ -215,29 +217,43 @@ namespace Scheduler.Master.Server
         async void discoveryTimerElapsed(object? sender, ElapsedEventArgs e)
         {
             discoveryTimer.Enabled = false;
+            times++;
 
             try
             {
-                var res = discovery.Discover();
-
-                res = res.Where(x => x.Guid != guid);
-
-                var newNodes = res.Where(x => !clusterSubscribers.Select(x => x.Guid).Contains(x.Guid));
-                var missNodes = clusterSubscribers.Where(x => !res.Select(x => x.Guid).Contains(x.Guid));
-                foreach (var item in missNodes)
+                if (times % 1 == 0)
                 {
-                    await item.StopAsync();
-                    clusterSubscribers.Remove(item);
+                    // 心跳写入数据库
+                    discovery.Register(new MqttNode
+                    {
+                        Guid = this.guid,
+                        Endpoint = this.ExternalUrl,
+                    });
                 }
-
-                foreach (var item in newNodes)
+                else if (times % 2 == 0)
                 {
-                    var sub = new ClusterSubscriber(item, this);
-                    clusterSubscribers.Add(sub);
-                    sub.StartAsync();
-                }
+                    // 服务发现
+                    var res = discovery.Discover();
 
-                Console.WriteLine(JsonSerializer.Serialize(res));
+                    res = res.Where(x => x.Guid != guid);
+
+                    var newNodes = res.Where(x => !clusterSubscribers.Select(x => x.Guid).Contains(x.Guid));
+                    var missNodes = clusterSubscribers.Where(x => !res.Select(x => x.Guid).Contains(x.Guid));
+                    foreach (var item in missNodes)
+                    {
+                        await item.StopAsync();
+                        clusterSubscribers.Remove(item);
+                    }
+
+                    foreach (var item in newNodes)
+                    {
+                        var sub = new ClusterSubscriber(item, this);
+                        clusterSubscribers.Add(sub);
+                        sub.StartAsync();
+                    }
+
+                    Console.WriteLine(JsonConvert.SerializeObject(res));
+                }
             }
             catch (Exception ex)
             {
