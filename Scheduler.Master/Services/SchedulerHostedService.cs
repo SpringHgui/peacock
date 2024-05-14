@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using Scheduler.Core.Models;
 using Scheduler.Entity.Models;
-using Scheduler.Master.Hubs;
 using Scheduler.Service;
 using TimeCrontab;
 using WheelTimer;

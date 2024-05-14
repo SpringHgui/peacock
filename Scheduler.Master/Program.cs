@@ -8,7 +8,6 @@ using MQTTnet.Diagnostics;
 using Scheduler.Entity.Data;
 using Scheduler.Master.Extensions;
 using Scheduler.Master.Filters;
-using Scheduler.Master.Hubs;
 using Scheduler.Master.Models;
 using Scheduler.Master.Server;
 using Scheduler.Master.Services;
@@ -116,20 +115,20 @@ namespace Scheduler.Master
             });
 
             builder.Services.AddSchedulerService(builder.Configuration);
-            builder.Services.AddSignalR(options =>
-            {
-                options.EnableDetailedErrors = true;
-                options.MaximumParallelInvocationsPerClient = 100;
-            })
-            //.AddStackExchangeRedis() // TODO��������չ
-            .AddJsonProtocol(options =>
-            {
-                options.PayloadSerializerOptions.PropertyNamingPolicy = null;
-            })
-            .AddHubOptions<JobExecutorHub>(hubOptions =>
-            {
-                hubOptions.MaximumReceiveMessageSize = null;
-            });
+            //builder.Services.AddSignalR(options =>
+            //{
+            //    options.EnableDetailedErrors = true;
+            //    options.MaximumParallelInvocationsPerClient = 100;
+            //})
+            ////.AddStackExchangeRedis() // TODO��������չ
+            //.AddJsonProtocol(options =>
+            //{
+            //    options.PayloadSerializerOptions.PropertyNamingPolicy = null;
+            //})
+            //.AddHubOptions<JobExecutorHub>(hubOptions =>
+            //{
+            //    hubOptions.MaximumReceiveMessageSize = null;
+            //});
 
             builder.Services.AddSingleton<IMqttNetLogger, MyLog>();
             builder.Services.AddSingleton<IDiscovery, DiscoveryFromDb>();
@@ -172,11 +171,11 @@ namespace Scheduler.Master
                 policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
             });
 
-            app.MapHub<JobExecutorHub>("/hubs/executor", options =>
-            {
-                options.ApplicationMaxBufferSize = 0;
-                options.TransportMaxBufferSize = 0;
-            });
+            //app.MapHub<JobExecutorHub>("/hubs/executor", options =>
+            //{
+            //    options.ApplicationMaxBufferSize = 0;
+            //    options.TransportMaxBufferSize = 0;
+            //});
 
             app.MapControllers();
 
