@@ -10,7 +10,7 @@ namespace Scheduler.Master.Services
 
         public MyMqttServer myMqttServer { get; }
 
-        public ServerSystem(IDiscovery discovery, IMqttNetLogger mqttNetLogger)
+        public ServerSystem(IDiscovery discovery, IMqttNetLogger mqttNetLogger, IServiceProvider serviceProvider)
         {
             this.mqttNetLogger = mqttNetLogger;
 
@@ -23,7 +23,7 @@ namespace Scheduler.Master.Services
             {
                 Ip = strHostName,
                 Port = 1883,
-            }, discovery, this.mqttNetLogger);
+            }, discovery, this.mqttNetLogger, serviceProvider);
         }
 
         public async Task StartAsync()

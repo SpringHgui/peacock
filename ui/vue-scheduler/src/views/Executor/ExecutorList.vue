@@ -18,11 +18,13 @@
                 <template #default="scope">
                     <el-popover placement="right" :width="400" trigger="click">
                         <template #reference>
-                            <el-link type="primary">{{ scope.row.handelrs.length }}个JobHandler</el-link>
+                            <el-link type="primary">{{ scope.row.handelrs?.length || 0 }}个JobHandler</el-link>
                         </template>
                         <h4>JobHandler名</h4>
-                        <div v-for="item in scope.row.handelrs">
-                            {{ item }}
+                        <div v-if="scope.row.handelrs">
+                            <div v-for="item in scope.row.handelrs" :key="item">
+                                {{ item }}
+                            </div>
                         </div>
                     </el-popover>
                 </template>
