@@ -19,10 +19,7 @@ namespace Scheduler.Master.Server
         public string Guid => nodeInfo.Guid;
 
         string willTopic => $"sys/cluster/offline/{Guid}";
-
-        // 转发主题
-        const string CLUSTER_TOPIC = "sys/cluster/proxy";
-
+ 
         public ClusterSubscriber(MqttNode nodeInfo, MyMqttServer mqttServer)
         {
             this.nodeInfo = nodeInfo;
@@ -74,7 +71,8 @@ namespace Scheduler.Master.Server
 
             client.ConnectedAsync += async e =>
             {
-                await client.SubscribeAsync(CLUSTER_TOPIC + "/" + Guid);
+                await client.SubscribeAsync("sys/cluster/clients/" + Guid);
+                await client.SubscribeAsync("sys/cluster/proxy/" + Guid);
                 Console.WriteLine($"[{mqttServer.guid}] 连接成功 {nodeInfo.Guid}");
             };
 

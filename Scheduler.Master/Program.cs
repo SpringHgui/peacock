@@ -24,6 +24,21 @@ namespace Scheduler.Master
             //    var dd = Crc16.CalculateCRC16(i);
             //    Console.WriteLine(dd);
             //}
+            const int SlotCount = 16384;
+
+            var nodes = new string[9];
+
+            var perCount = SlotCount / nodes.Count();
+            int start = 0;
+            foreach (var node in nodes)
+            {
+                var next = start + perCount;
+                var Slot = $"{start},{next - 1}";
+                start = next;
+
+                Console.WriteLine($"{Slot}");
+            }
+
 
             const string outputTemplate = "[{Timestamp:HH:mm:ss} {RequestId} {Level:u3}] {Message:lj}{NewLine}{Exception}";
 

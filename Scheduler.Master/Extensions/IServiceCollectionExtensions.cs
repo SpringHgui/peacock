@@ -16,7 +16,7 @@ namespace Scheduler.Master.Extensions
                 {
                     throw new Exception("未找到数据库连接配置");
                 }
-
+                options.EnableSensitiveDataLogging();
                 options.UseMySQL(constr);
             });
 

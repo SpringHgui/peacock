@@ -19,20 +19,31 @@ namespace Scheduler.Service
         public IEnumerable<ScServer> GetServerOnline(int heart)
         {
             var time = DateTime.Now.AddSeconds(-heart).ToTimestamp();
-            Console.Write(time);
             return DBContext.ScServers.Where(x => x.HeartAt > time).ToList();
         }
 
         public void RegisterOrUpdate(ScServer mqttNode)
         {
-            var old = DBContext.ScServers.Where(x => x.Guid == mqttNode.Guid);
-            if (!old.Any())
+            var olds = DBContext.ScServers.Where(x => x.Guid == mqttNode.Guid);
+            if (!olds.Any())
             {
                 DBContext.ScServers.Add(mqttNode);
             }
             else
             {
-                DBContext.ScServers.Update(mqttNode);
+                var old = olds.FirstOrDefault();
+                old.HeartAt = mqttNode.HeartAt;
+                DBContext.ScServers.Update(old);
+            }
+
+            DBContext.SaveChanges();
+        }
+
+        public void UpdateSlot(IEnumerable<ScServer> nodes)
+        {
+            foreach (var item in nodes)
+            {
+                DBContext.ScServers.Update(item);
             }
 
             DBContext.SaveChanges();

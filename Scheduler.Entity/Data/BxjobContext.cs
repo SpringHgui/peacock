@@ -12,6 +12,8 @@ public partial class BxjobContext : DbContext
     {
     }
 
+    public virtual DbSet<ScApp> ScApps { get; set; }
+
     public virtual DbSet<ScJob> ScJobs { get; set; }
 
     public virtual DbSet<ScNode> ScNodes { get; set; }
@@ -24,6 +26,21 @@ public partial class BxjobContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<ScApp>(entity =>
+        {
+            entity.HasKey(e => e.Appid).HasName("PRIMARY");
+
+            entity.ToTable("sc_app");
+
+            entity.Property(e => e.Appid).HasColumnName("appid");
+            entity.Property(e => e.AppName)
+                .HasMaxLength(64)
+                .HasColumnName("app_name");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.Enabled).HasColumnName("enabled");
+        });
+
         modelBuilder.Entity<ScJob>(entity =>
         {
             entity.HasKey(e => e.JobId).HasName("PRIMARY");
@@ -97,17 +114,24 @@ public partial class BxjobContext : DbContext
 
         modelBuilder.Entity<ScServer>(entity =>
         {
-            entity.HasKey(e => e.Guid).HasName("PRIMARY");
+            entity.HasKey(e => e.Id).HasName("PRIMARY");
 
             entity.ToTable("sc_server");
 
-            entity.Property(e => e.Guid)
-                .HasMaxLength(64)
-                .HasColumnName("guid");
+            entity.HasIndex(e => e.Guid, "guid").IsUnique();
+
+            entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.EndPoint)
                 .HasMaxLength(64)
                 .HasColumnName("end_point");
+            entity.Property(e => e.Guid)
+                .HasMaxLength(64)
+                .HasColumnName("guid");
             entity.Property(e => e.HeartAt).HasColumnName("heart_at");
+            entity.Property(e => e.Slot)
+                .HasMaxLength(64)
+                .HasComment("0~16383")
+                .HasColumnName("slot");
         });
 
         modelBuilder.Entity<ScTask>(entity =>

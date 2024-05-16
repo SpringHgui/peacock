@@ -2,8 +2,11 @@
 {
     public interface IDiscovery
     {
-        public IEnumerable<MqttNode> Discover();
+        public Task StartAsync(MyMqttServer myMqttServer);
 
-        public void Register(MqttNode mqttNode);
+        public event OnNewNodeChange OnNewNodeConnected;
+        public event OnNewNodeChange OnNodeDisconnected;
+
+        public delegate Task OnNewNodeChange(MqttNode node);
     }
 }
