@@ -8,6 +8,9 @@ using MQTTnet.Diagnostics;
 using Newtonsoft.Json;
 using Scheduler.Master.Models;
 using System.Collections.Concurrent;
+using Google.Protobuf.WellKnownTypes;
+using System.Xml.Linq;
+using Microsoft.Win32;
 
 namespace Scheduler.Master.Server
 {
@@ -22,14 +25,17 @@ namespace Scheduler.Master.Server
 
         IEnumerable<MqttNode> mqttNodes;
         int times = 0;
-
+        public SelfSubscriber selfSubscriber;
         public ConcurrentBag<ExecutorClient> OnlineUsers = new ConcurrentBag<ExecutorClient>();
+        IServiceProvider serviceProvider;
 
-        public MyMqttServer(MyMqttServerOptions options, IDiscovery discovery, IMqttNetLogger logger)
+        public MyMqttServer(MyMqttServerOptions options, IDiscovery discovery, IMqttNetLogger logger, IServiceProvider serviceProvider)
         {
             this.logger = logger;
             this.options = options ?? throw new ArgumentNullException(nameof(options));
             this.discovery = discovery ?? throw new ArgumentNullException(nameof(discovery));
+
+            this.serviceProvider = serviceProvider;
 
             discoveryTimer = new System.Timers.Timer();
             discoveryTimer.Interval = 5000;
@@ -133,6 +139,8 @@ namespace Scheduler.Master.Server
                         }
                     }
 
+                    e.ResponseUserProperties = new List<MQTTnet.Packets.MqttUserProperty>() { new MQTTnet.Packets.MqttUserProperty("server", guid) };
+
                     return CompletedTask.Instance;
                 };
 
@@ -140,16 +148,16 @@ namespace Scheduler.Master.Server
                 mqttServer.InterceptingSubscriptionAsync += e =>
                 {
                     Console.Write($"[ValidatingConnection]");
-                    if (e.TopicFilter.Topic.StartsWith("admin/foo/bar") && e.ClientId != "theAdmin")
-                    {
-                        e.Response.ReasonCode = MqttSubscribeReasonCode.ImplementationSpecificError;
-                    }
+                    //if (e.TopicFilter.Topic.StartsWith("admin/foo/bar") && e.ClientId != "theAdmin")
+                    //{
+                    //    e.Response.ReasonCode = MqttSubscribeReasonCode.ImplementationSpecificError;
+                    //}
 
-                    if (e.TopicFilter.Topic.StartsWith("the/secret/stuff") && e.ClientId != "Imperator")
-                    {
-                        e.Response.ReasonCode = MqttSubscribeReasonCode.ImplementationSpecificError;
-                        e.CloseConnection = true;
-                    }
+                    //if (e.TopicFilter.Topic.StartsWith("the/secret/stuff") && e.ClientId != "Imperator")
+                    //{
+                    //    e.Response.ReasonCode = MqttSubscribeReasonCode.ImplementationSpecificError;
+                    //    e.CloseConnection = true;
+                    //}
 
                     return CompletedTask.Instance;
                 };
@@ -220,9 +228,10 @@ namespace Scheduler.Master.Server
             OnlineUsers.Add(new ExecutorClient()
             {
                 ClientId = arg.ClientId,
-                GroupName = arg.UserProperties.Where(x => x.Name == "GroupName").FirstOrDefault().Value,
+                GroupName = arg.UserProperties?.Where(x => x.Name == "GroupName").FirstOrDefault()?.Value,
                 StartTime = DateTime.Now,
             });
+
             return Task.CompletedTask;
         }
 
@@ -235,52 +244,60 @@ namespace Scheduler.Master.Server
         {
             discoveryTimer.Start();
             await mqttServer.StartAsync();
+
+            // 自己订阅自己
+            selfSubscriber = new SelfSubscriber(this, serviceProvider);
+            await selfSubscriber.StartAsync();
         }
 
         public string ExternalUrl => options.ExternalUrl ?? $"{options.Ip}:{options.Port}";
 
         IList<ClusterSubscriber> clusterSubscribers = new List<ClusterSubscriber>();
 
-        async void discoveryTimerElapsed(object? sender, ElapsedEventArgs e)
+        async Task RegisterAsync()
+        {
+            // 心跳写入数据库
+            discovery.Register(new MqttNode
+            {
+                Guid = this.guid,
+                Endpoint = this.ExternalUrl,
+            });
+
+            if (times % 2 == 0)
+            {
+                // 服务发现
+                var res = discovery.Discover();
+
+                Console.WriteLine(JsonConvert.SerializeObject(res));
+
+                res = res.Where(x => x.Guid != guid);
+
+                var newNodes = res.Where(x => !clusterSubscribers.Select(x => x.Guid).Contains(x.Guid));
+                var missNodes = clusterSubscribers.Where(x => !res.Select(x => x.Guid).Contains(x.Guid));
+
+                foreach (var item in missNodes)
+                {
+                    await item.StopAsync();
+                    clusterSubscribers.Remove(item);
+                }
+
+                foreach (var item in newNodes)
+                {
+                    var sub = new ClusterSubscriber(item, this);
+                    clusterSubscribers.Add(sub);
+                    sub.StartAsync();
+                }
+            }
+        }
+
+        void discoveryTimerElapsed(object? sender, ElapsedEventArgs e)
         {
             discoveryTimer.Enabled = false;
             times++;
 
             try
             {
-                // 心跳写入数据库
-                discovery.Register(new MqttNode
-                {
-                    Guid = this.guid,
-                    Endpoint = this.ExternalUrl,
-                });
-
-                if (times % 2 == 0)
-                {
-                    // 服务发现
-                    var res = discovery.Discover();
-
-                    Console.WriteLine(JsonConvert.SerializeObject(res));
-
-                    res = res.Where(x => x.Guid != guid);
-
-                    var newNodes = res.Where(x => !clusterSubscribers.Select(x => x.Guid).Contains(x.Guid));
-                    var missNodes = clusterSubscribers.Where(x => !res.Select(x => x.Guid).Contains(x.Guid));
-
-                    foreach (var item in missNodes)
-                    {
-                        await item.StopAsync();
-                        clusterSubscribers.Remove(item);
-                    }
-
-                    foreach (var item in newNodes)
-                    {
-                        var sub = new ClusterSubscriber(item, this);
-                        clusterSubscribers.Add(sub);
-                        sub.StartAsync();
-                    }
-
-                }
+                RegisterAsync().Wait();
             }
             catch (Exception ex)
             {

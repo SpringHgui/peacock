@@ -19,6 +19,12 @@ namespace Scheduler.Master
     {
         public static void Main(string[] args)
         {
+            //for (int i = 0; i < 1000; i++)
+            //{
+            //    var dd = Crc16.CalculateCRC16(i);
+            //    Console.WriteLine(dd);
+            //}
+
             const string outputTemplate = "[{Timestamp:HH:mm:ss} {RequestId} {Level:u3}] {Message:lj}{NewLine}{Exception}";
 
             var builder = WebApplication.CreateBuilder(args);
@@ -27,7 +33,7 @@ namespace Scheduler.Master
             builder.Services.AddSerilog((config) =>
             {
                 config.MinimumLevel.Debug()
-                    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning) // Microsoft.Hosting.Lifetime
+                    .MinimumLevel.Override("Microsoft", LogEventLevel.Information) // Microsoft.Hosting.Lifetime
                     .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Error)
                     .WriteTo.File("logs/.log", outputTemplate: outputTemplate, rollingInterval: RollingInterval.Hour, shared: true)
                     .WriteTo.Console(outputTemplate: outputTemplate);
@@ -137,7 +143,13 @@ namespace Scheduler.Master
             builder.Services.AddHostedService<MqttServerService>();
             builder.Services.AddSingleton<CustomExceptionFilterAttribute>();
             builder.Services.AddSingleton<HubContext>();
-            builder.Services.AddCors();
+            builder.Services.AddCors(opt =>
+            {
+                opt.AddPolicy("defalut", policy =>
+                {
+                    policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod().WithOrigins("http://127.0.0.1:5173");
+                });
+            });
 
             var app = builder.Build();
 
@@ -164,10 +176,7 @@ namespace Scheduler.Master
             app.UseAuthentication();
             app.UseAuthorization();
 
-            app.UseCors(policy =>
-            {
-                policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
-            });
+            app.UseCors("defalut");
 
             //app.MapHub<JobExecutorHub>("/hubs/executor", options =>
             //{

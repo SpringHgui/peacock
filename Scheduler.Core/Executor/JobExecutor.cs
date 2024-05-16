@@ -34,6 +34,7 @@ namespace Scheduler.Core.Executor
         string willTopic => $"sys/client/offline/{ClientId}";
         string ClientId;
         System.Timers.Timer timer;
+        string serverGuid;
         public JobExecutor(
             ILogger<JobExecutor> logger,
             IOptions<JobExecutorOptions> options,
@@ -92,14 +93,43 @@ namespace Scheduler.Core.Executor
                 Console.WriteLine($"+ QoS = {e.ApplicationMessage.QualityOfServiceLevel}");
                 Console.WriteLine($"+ Retain = {e.ApplicationMessage.Retain}");
                 Console.WriteLine();
+                // onjob
+                var topic = e.ApplicationMessage.Topic.Split('/').Last();
+                switch (topic)
+                {
+                    case "onjob":
+                        var onjob = System.Text.Json.JsonSerializer.Deserialize<OnJob>(payloadText);
+                        using (var _ = LogContext.PushProperty("RequestId", $"ExecuteTask:{onjob.Job.TaskId}"))
+                        {
+                            jobsQueue.Enqueue(onjob);
+                            logger.LogInformation($"当前待处理: {jobsQueue.Count}");
+                        }
 
+                        break;
+                    default:
+                        break;
+                }
                 return Task.CompletedTask;
             };
 
             client.ConnectedAsync += async e =>
             {
-                await client.SubscribeAsync($"sys/client/{ClientId}");
+                // 
+                  serverGuid = e.ConnectResult.UserProperties.First(x => x.Name == "server").Value;
 
+                await client.SubscribeAsync($"client/{ClientId}/#");
+
+                var applicationMessage = new MqttApplicationMessageBuilder()
+                    .WithTopic($"server/{serverGuid}/SyncHandlers")
+                    .WithUserProperty("id", ClientId)
+                    .WithPayload(JsonSerializer.Serialize(schedulerConfig.jobs.Select(x => x.Key)))
+                    .Build();
+
+                // 
+                await client.PublishAsync(applicationMessage, CancellationToken.None);
+
+                // 
+                // server
                 Console.WriteLine($"[{ClientId}] 连接成功");
             };
 
@@ -221,10 +251,10 @@ namespace Scheduler.Core.Executor
             }
 
             var message = new MqttApplicationMessageBuilder()
-                .WithTopic("MyTopic")
+                .WithTopic($"server/{serverGuid}/job_reslut")
                 .WithPayload(JsonSerializer.Serialize(msg))
                 .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
-                .WithRetainFlag().Build();
+                .Build();
 
             var res = await client.PublishAsync(message, CancellationToken.None);
         }
@@ -241,21 +271,9 @@ namespace Scheduler.Core.Executor
             this.cancellationToken = cancellationToken;
             logger.LogInformation("[Scheduler 启动成功]");
 
-            // 开始连接
-            await ConnectWithRetryAsync(cancellationToken);
-        }
-
-        /// <summary>
-        /// 断线重连
-        /// </summary>
-        /// <param name="token"></param>
-        /// <returns></returns>
-        /// <exception cref="ArgumentNullException"></exception>
-        public async Task ConnectWithRetryAsync(CancellationToken token)
-        {
             try
             {
-                await client.ConnectAsync(clientOptions, token);
+                var res = await client.ConnectAsync(clientOptions, cancellationToken);
             }
             catch (Exception ex)
             {
