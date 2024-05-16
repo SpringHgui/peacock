@@ -12,5 +12,7 @@
         public string? Slot { get; set; }
 
         public long Id { get; set; }
+
+        public long HeartAt { get; set; }
     }
 }

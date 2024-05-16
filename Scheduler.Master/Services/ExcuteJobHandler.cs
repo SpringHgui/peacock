@@ -1,17 +1,9 @@
-﻿using BX.Utility.Helper;
-using Microsoft.AspNetCore.SignalR;
-using MQTTnet;
-using Mysqlx.Prepare;
-using MySqlX.XDevAPI;
-using MySqlX.XDevAPI.Common;
+﻿using MQTTnet;
 using Scheduler.Core.Models;
 using Scheduler.Entity.Models;
 using Scheduler.Master.Models;
-using Scheduler.Master.Server;
 using Scheduler.Service;
-using System.CodeDom.Compiler;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Text.Json;
 
 namespace Scheduler.Master.Services

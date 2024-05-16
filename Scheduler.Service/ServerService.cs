@@ -2,11 +2,6 @@
 using Qz.Utility.Extensions;
 using Scheduler.Entity.Data;
 using Scheduler.Entity.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Scheduler.Service
 {
@@ -14,6 +9,13 @@ namespace Scheduler.Service
     {
         public ServerService(BxjobContext ScJobContext) : base(ScJobContext)
         {
+        }
+
+        public void Delete(ScServer item)
+        {
+            item.Slot = null;
+            DBContext.ScServers.Update(item);
+            DBContext.SaveChanges();
         }
 
         public IEnumerable<ScServer> GetServerOnline(int heart)

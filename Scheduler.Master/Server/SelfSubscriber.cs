@@ -6,8 +6,6 @@ using System.Text;
 using System.Text.Json;
 using Scheduler.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
-using Api.WeiXinWork.Robot.Models;
-using Api.WeiXinWork.Robot;
 using Scheduler.Entity.Models;
 using Scheduler.Service;
 using System;
@@ -108,47 +106,47 @@ namespace Scheduler.Master.Server
 
                             jobService.UpdateParallelCount(onJob.Job.JobId, -1);
 
-                            // 报警
-                            if (!onJob.Success)
-                            {
+                            //// 报警
+                            //if (!onJob.Success)
+                            //{
 
-                                if (job != null && job.AlarmType > 0)
-                                {
-                                    switch (job.AlarmType)
-                                    {
-                                        case 1:
-                                            if (!string.IsNullOrEmpty(job.AlarmContent))
-                                            {
-                                                var text = $"""
-                                    任务调度平台/调度失败提醒
+                            //    if (job != null && job.AlarmType > 0)
+                            //    {
+                            //        switch (job.AlarmType)
+                            //        {
+                            //            case 1:
+                            //                if (!string.IsNullOrEmpty(job.AlarmContent))
+                            //                {
+                            //                    var text = $"""
+                            //        任务调度平台/调度失败提醒
                         
-                                    任务名称：{job.GroupName}/{job.Name}
-                                    调度实例：TaskId：{onJob.Job.TaskId}
-                                    危险级别：{"高"}
-                                    提醒时间：{DateTime.Now.ToString("MM-dd HH:mm:ss")}
-                                    详细内容：{onJob.ErrMsg}
+                            //        任务名称：{job.GroupName}/{job.Name}
+                            //        调度实例：TaskId：{onJob.Job.TaskId}
+                            //        危险级别：{"高"}
+                            //        提醒时间：{DateTime.Now.ToString("MM-dd HH:mm:ss")}
+                            //        详细内容：{onJob.ErrMsg}
                         
-                                    请值班研发人员查看失败原因，及时处理！
-                                    """;
+                            //        请值班研发人员查看失败原因，及时处理！
+                            //        """;
 
-                                                var robot = new RobotApi(job.AlarmContent);
-                                                robot.Send(new SendMsgRequest
-                                                {
-                                                    text = new SendMsgRequest.Text
-                                                    {
-                                                        content = text
-                                                    },
-                                                    msgtype = SendMsgRequest.MsgType.text
-                                                });
-                                            }
+                            //                    var robot = new RobotApi(job.AlarmContent);
+                            //                    robot.Send(new SendMsgRequest
+                            //                    {
+                            //                        text = new SendMsgRequest.Text
+                            //                        {
+                            //                            content = text
+                            //                        },
+                            //                        msgtype = SendMsgRequest.MsgType.text
+                            //                    });
+                            //                }
 
-                                            break;
-                                        default:
+                            //                break;
+                            //            default:
 
-                                            break;
-                                    }
-                                }
-                            }
+                            //                break;
+                            //        }
+                            //    }
+                            //}
                         }
                         break;
                     default:

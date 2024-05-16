@@ -86,10 +86,20 @@ namespace Scheduler.Master.Server
                     }
                 }
 
+                using var scope = service.CreateScope();
+                var serverService = scope.ServiceProvider.GetRequiredService<ServerService>();
                 foreach (var item in missNodes)
                 {
                     changed = true;
-                    OnNewNodeConnected?.Invoke(item.Value);
+                    OnNodeDisconnected?.Invoke(item.Value);
+
+                    serverService.Delete(new ScServer()
+                    {
+                        Id = item.Value.Id,
+                        HeartAt = item.Value.HeartAt,
+                        Guid = item.Value.Guid,
+                        EndPoint = item.Value.Endpoint
+                    });
                 }
 
                 if (changed)
@@ -120,7 +130,7 @@ namespace Scheduler.Master.Server
             {
                 EndPoint = x.Endpoint,
                 Guid = x.Guid,
-                HeartAt = DateTime.Now.ToTimestamp(),
+                HeartAt = x.HeartAt,
                 Slot = x.Slot,
                 Id = x.Id,
             }));
@@ -138,6 +148,7 @@ namespace Scheduler.Master.Server
                 Id = x.Id,
                 Slot = x.Slot,
                 Endpoint = x.EndPoint,
+                HeartAt = x.HeartAt,
                 Guid = x.Guid,
             });
         }
