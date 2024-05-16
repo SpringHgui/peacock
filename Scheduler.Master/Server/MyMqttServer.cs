@@ -10,6 +10,7 @@ using Scheduler.Master.Models;
 using System.Collections.Concurrent;
 using Google.Protobuf.WellKnownTypes;
 using System.Xml.Linq;
+using Microsoft.Win32;
 
 namespace Scheduler.Master.Server
 {
@@ -253,46 +254,50 @@ namespace Scheduler.Master.Server
 
         IList<ClusterSubscriber> clusterSubscribers = new List<ClusterSubscriber>();
 
-        async void discoveryTimerElapsed(object? sender, ElapsedEventArgs e)
+        async Task RegisterAsync()
+        {
+            // 心跳写入数据库
+            discovery.Register(new MqttNode
+            {
+                Guid = this.guid,
+                Endpoint = this.ExternalUrl,
+            });
+
+            if (times % 2 == 0)
+            {
+                // 服务发现
+                var res = discovery.Discover();
+
+                Console.WriteLine(JsonConvert.SerializeObject(res));
+
+                res = res.Where(x => x.Guid != guid);
+
+                var newNodes = res.Where(x => !clusterSubscribers.Select(x => x.Guid).Contains(x.Guid));
+                var missNodes = clusterSubscribers.Where(x => !res.Select(x => x.Guid).Contains(x.Guid));
+
+                foreach (var item in missNodes)
+                {
+                    await item.StopAsync();
+                    clusterSubscribers.Remove(item);
+                }
+
+                foreach (var item in newNodes)
+                {
+                    var sub = new ClusterSubscriber(item, this);
+                    clusterSubscribers.Add(sub);
+                    sub.StartAsync();
+                }
+            }
+        }
+
+        void discoveryTimerElapsed(object? sender, ElapsedEventArgs e)
         {
             discoveryTimer.Enabled = false;
             times++;
 
             try
             {
-                // 心跳写入数据库
-                discovery.Register(new MqttNode
-                {
-                    Guid = this.guid,
-                    Endpoint = this.ExternalUrl,
-                });
-
-                if (times % 2 == 0)
-                {
-                    // 服务发现
-                    var res = discovery.Discover();
-
-                    Console.WriteLine(JsonConvert.SerializeObject(res));
-
-                    res = res.Where(x => x.Guid != guid);
-
-                    var newNodes = res.Where(x => !clusterSubscribers.Select(x => x.Guid).Contains(x.Guid));
-                    var missNodes = clusterSubscribers.Where(x => !res.Select(x => x.Guid).Contains(x.Guid));
-
-                    foreach (var item in missNodes)
-                    {
-                        await item.StopAsync();
-                        clusterSubscribers.Remove(item);
-                    }
-
-                    foreach (var item in newNodes)
-                    {
-                        var sub = new ClusterSubscriber(item, this);
-                        clusterSubscribers.Add(sub);
-                        sub.StartAsync();
-                    }
-
-                }
+                RegisterAsync().Wait();
             }
             catch (Exception ex)
             {

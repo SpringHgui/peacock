@@ -22,6 +22,12 @@ namespace Scheduler.Master
     {
         public static void Main(string[] args)
         {
+            //for (int i = 0; i < 1000; i++)
+            //{
+            //    var dd = Crc16.CalculateCRC16(i);
+            //    Console.WriteLine(dd);
+            //}
+
             const string outputTemplate = "[{Timestamp:HH:mm:ss} {RequestId} {Level:u3}] {Message:lj}{NewLine}{Exception}";
 
             var builder = WebApplication.CreateBuilder(args);
