@@ -28,6 +28,8 @@ namespace Scheduler.Master.Server
         public ConcurrentBag<ExecutorClient> OnlineUsers = new ConcurrentBag<ExecutorClient>();
         IServiceProvider serviceProvider;
 
+        public (int Start, int End) Slot { get; private set; }
+
         public string ExternalUrl => options.ExternalUrl ?? $"{options.Ip}:{options.Port}";
 
         public IList<ClusterSubscriber> clusterSubscribers = new List<ClusterSubscriber>();
@@ -40,7 +42,7 @@ namespace Scheduler.Master.Server
 
             this.discovery.OnNodeDisconnected += Discovery_OnNodeDisconnected;
             this.discovery.OnNewNodeConnected += Discovery_OnNewNodeConnected;
-
+            this.discovery.OnSlotsChange += Discovery_OnSlotsChange;
             this.serviceProvider = serviceProvider;
 
             try
@@ -212,6 +214,12 @@ namespace Scheduler.Master.Server
             {
                 Console.WriteLine(e);
             }
+        }
+
+        private Task Discovery_OnSlotsChange(int start, int end)
+        {
+            Slot = (start, end);
+            return Task.CompletedTask;
         }
 
         private async Task Discovery_OnNewNodeConnected(MqttNode node)

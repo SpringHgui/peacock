@@ -38,4 +38,6 @@ public partial class ScJob
     public int ThreadCount { get; set; }
 
     public long NextTriggerTime { get; set; }
+
+    public int Slot { get; set; }
 }

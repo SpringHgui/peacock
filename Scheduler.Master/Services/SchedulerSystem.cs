@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Qz.Utility.Extensions;
 using Scheduler.Entity.Models;
 using Scheduler.Master.Models;
 using Scheduler.Service;
@@ -14,7 +15,6 @@ namespace Scheduler.Master.Services
         ILogger<SchedulerSystem> logger;
         IServiceProvider service;
 
-        static object locker = new object();
         System.Timers.Timer timer;
         ExcuteJobHandler excuteJobHandler;
 
@@ -32,9 +32,13 @@ namespace Scheduler.Master.Services
             ReloadScheduler();
         }
 
+        ServerSystem serverSystem;
+
         public SchedulerSystem(ExcuteJobHandler excuteJobHandler,
-            IServiceProvider service, ILogger<SchedulerSystem> logger)
+            IServiceProvider service, ILogger<SchedulerSystem> logger, ServerSystem serverSystem)
         {
+            hashedWheelTimer = new HashedWheelTimer();
+            this.serverSystem = serverSystem;
             this.excuteJobHandler = excuteJobHandler;
             this.service = service;
             this.logger = logger;
@@ -43,7 +47,7 @@ namespace Scheduler.Master.Services
             {
                 AutoReset = true,
                 Enabled = true,
-                Interval = 60 * 5 * 1000,// 5分钟执行一次 60 * 5 * 1000
+                Interval = 15000,// 15秒
             };
 
             timer.Elapsed += Timer_Elapsed;
@@ -51,40 +55,32 @@ namespace Scheduler.Master.Services
 
         private void Timer_Elapsed(object? sender, System.Timers.ElapsedEventArgs e)
         {
-            logger.LogInformation("重新加载配置");
+            logger.LogInformation($"重新加载配置 {serverSystem.myMqttServer.Slot.Start},{serverSystem.myMqttServer.Slot.End}");
             ReloadScheduler();
         }
 
         public void ReloadScheduler()
         {
-            lock (locker)
+            try
             {
-                try
+                using var scope = service.CreateScope();
+
+                var jobService = scope.ServiceProvider.GetRequiredService<JobService>();
+                var jobs = jobService.GetNextJob(serverSystem.myMqttServer.Slot.Start, serverSystem.myMqttServer.Slot.End, DateTime.Now.AddSeconds(15).ToTimestamp());
+
+                foreach (var item in jobs)
                 {
-                    if (hashedWheelTimer != null)
-                        hashedWheelTimer.StopAsync().Wait();
-
-                    hashedWheelTimer = new HashedWheelTimer();
-
-                    using var scope = service.CreateScope();
-
-                    var jobService = scope.ServiceProvider.GetRequiredService<JobService>();
-                    var jobs = jobService.ListJobs(1, 1000, null, out _);
-
-                    foreach (var item in jobs)
+                    if (!item.Enabled)
                     {
-                        if (!item.Enabled)
-                        {
-                            continue;
-                        }
-
-                        SchedulerJob(item);
+                        continue;
                     }
+
+                    SchedulerJob(item);
                 }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "ReloadScheduler Error");
-                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "ReloadScheduler Error");
             }
         }
 
@@ -107,26 +103,29 @@ namespace Scheduler.Master.Services
                     var jobService = scope.ServiceProvider.GetRequiredService<JobService>();
 
                     // 重新获取，避免在等待执行期间数据库中的数据被修改导致不一致
-                    var currentJob = jobService.GetJob(jobMolde.JobId);
-                    if (currentJob == null)
+                    if (jobMolde == null)
                     {
                         logger.LogError($"任务不存：{jobMolde.JobId}");
                         return;
                     }
 
                     // 
-                    if (!currentJob.Enabled)
+                    if (!jobMolde.Enabled)
                     {
                         logger.LogError($"任务已禁用：{jobMolde.JobId}");
                         return;
                     }
 
                     // 继续插入下个周期
-                    SchedulerJob(currentJob);
+                    //SchedulerJob(currentJob);
+                    var nextOccurrence = crontab.GetNextOccurrence(DateTime.Now);
+
+                    jobMolde.NextTriggerTime = nextOccurrence.ToTimestamp();
+                    jobService.UpdateNext(jobMolde);
 
                     try
                     {
-                        var result = await excuteJobHandler.ExcuteJobAsync(currentJob);
+                        var result = await excuteJobHandler.ExcuteJobAsync(jobMolde);
                         logger.LogInformation($"[下发调度任务结果]：{result.Message}");
                     }
                     catch (Exception ex)

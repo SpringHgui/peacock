@@ -84,6 +84,7 @@ public partial class BxjobContext : DbContext
                 .HasDefaultValueSql("''")
                 .HasColumnName("name");
             entity.Property(e => e.NextTriggerTime).HasColumnName("next_trigger_time");
+            entity.Property(e => e.Slot).HasColumnName("slot");
             entity.Property(e => e.ThreadCount).HasColumnName("thread_count");
             entity.Property(e => e.TimeExpression)
                 .HasMaxLength(64)

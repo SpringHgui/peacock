@@ -23,6 +23,7 @@ namespace Scheduler.Master.Server
 
         public event OnNewNodeChange OnNewNodeConnected;
         public event OnNewNodeChange OnNodeDisconnected;
+        public event OnNodeSlotsChange OnSlotsChange;
 
         public DiscoveryFromDb(IServiceProvider service, ILogger<DiscoveryFromDb> logger)
         {
@@ -134,6 +135,9 @@ namespace Scheduler.Master.Server
                 Slot = x.Slot,
                 Id = x.Id,
             }));
+
+            var currentNode = nodes.First(x => x.Guid == myMqttServer.guid);
+            OnSlotsChange.Invoke(int.Parse(currentNode.Slot!.Split(',')[0]), int.Parse(currentNode.Slot.Split(',')[1]));
         }
 
         IEnumerable<MqttNode> Discover()

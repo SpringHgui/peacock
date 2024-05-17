@@ -6,6 +6,9 @@
 
         public event OnNewNodeChange OnNewNodeConnected;
         public event OnNewNodeChange OnNodeDisconnected;
+        public event OnNodeSlotsChange OnSlotsChange;
+
+        public delegate Task OnNodeSlotsChange(int start, int end);
 
         public delegate Task OnNewNodeChange(MqttNode node);
     }
