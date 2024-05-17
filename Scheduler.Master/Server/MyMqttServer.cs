@@ -27,11 +27,11 @@ namespace Scheduler.Master.Server
 
         IMqttNetLogger logger;
         public SelfSubscriber selfSubscriber;
-        public ConcurrentBag<ExecutorClient> CurrentNodeOnlineUsers = new ConcurrentBag<ExecutorClient>();
+        public ConcurrentDictionary<string, ExecutorClient> CurrentNodeOnlineUsers = new ConcurrentDictionary<string, ExecutorClient>();
 
         public IEnumerable<ExecutorClient> GetAllClientsOnline()
         {
-            IEnumerable<ExecutorClient> clients = CurrentNodeOnlineUsers;
+            IEnumerable<ExecutorClient> clients = CurrentNodeOnlineUsers.Select(x => x.Value);
             foreach (var item in OtherNodeOlineUsers)
             {
                 clients = clients.Concat(item.Value);
@@ -42,7 +42,7 @@ namespace Scheduler.Master.Server
 
         public IEnumerable<ExecutorClient> GetClientsByAppName(string appname)
         {
-            var clients = CurrentNodeOnlineUsers.Where(x => x.GroupName == appname);
+            var clients = CurrentNodeOnlineUsers.Where(x => x.Value.GroupName == appname).Select(x => x.Value);
             foreach (var item in OtherNodeOlineUsers)
             {
                 clients = clients.Concat(item.Value.Where(x => x.GroupName == appname));
@@ -274,7 +274,7 @@ namespace Scheduler.Master.Server
         private void OnClientsChange(IEnumerable<ExecutorClient> clients, MqttNode nodeInfo)
         {
             logger.Publish(MqttNetLogLevel.Info, nameof(OnClientsChange), $"客户端变化：{nodeInfo.Guid} {clients.Count()}", null, null);
-            OtherNodeOlineUsers.TryAdd(nodeInfo.Guid, clients);
+            OtherNodeOlineUsers.AddOrUpdate(nodeInfo.Guid, _ => clients, (key, _) => clients);
         }
 
         private async Task Discovery_OnNodeDisconnected(MqttNode node)
@@ -288,22 +288,18 @@ namespace Scheduler.Master.Server
         private async Task MqttServer_ClientDisconnectedAsync(ClientDisconnectedEventArgs arg)
         {
             logger.Publish(MqttNetLogLevel.Info, nameof(MqttServer_ClientConnectedAsync), $"客户端离线 {arg.ClientId}", null, null);
-            var clinet = CurrentNodeOnlineUsers.FirstOrDefault(x => x.ClientId == arg.ClientId);
-            if (clinet != null)
+            if (CurrentNodeOnlineUsers.TryRemove(arg.ClientId, out ExecutorClient? client))
             {
-                if (CurrentNodeOnlineUsers.TryTake(out clinet))
-                {
-                    logger.Publish(MqttNetLogLevel.Info, nameof(MqttServer_ClientConnectedAsync), $"客户端移除成功", null, null);
-                }
-                else
-                {
-                    logger.Publish(MqttNetLogLevel.Error, nameof(MqttServer_ClientConnectedAsync), $"客户端未找到", null, null);
-                }
+                logger.Publish(MqttNetLogLevel.Info, nameof(MqttServer_ClientConnectedAsync), $"客户端移除成功", null, null);
+            }
+            else
+            {
+                logger.Publish(MqttNetLogLevel.Error, nameof(MqttServer_ClientConnectedAsync), $"客户端未找到", null, null);
             }
 
             var applicationMessage = new MqttApplicationMessageBuilder()
-                .WithTopic($"cluster/clients/change/{guid}")
-                .WithPayload(System.Text.Json.JsonSerializer.Serialize(CurrentNodeOnlineUsers))
+                .WithTopic($"server/from/{guid}/clients-change")
+                .WithPayload(System.Text.Json.JsonSerializer.Serialize(CurrentNodeOnlineUsers.Select(x => x.Value)))
                 .Build();
 
             await selfSubscriber.PublishAsync(applicationMessage);
@@ -311,23 +307,31 @@ namespace Scheduler.Master.Server
 
         private async Task MqttServer_ClientConnectedAsync(ClientConnectedEventArgs arg)
         {
-            logger.Publish(MqttNetLogLevel.Info, nameof(MqttServer_ClientConnectedAsync), $"客户端上线 {arg.ClientId}", null, null);
-            CurrentNodeOnlineUsers.Add(new ExecutorClient()
+            var from = arg.UserProperties?.Where(x => x.Name == "from").FirstOrDefault()?.Value;
+            if (from == "client")
             {
-                ServerId = guid,
-                ClientId = arg.ClientId,
-                GroupName = arg.UserProperties?.Where(x => x.Name == "GroupName").FirstOrDefault()?.Value,
-                StartTime = DateTime.Now,
-            });
+                CurrentNodeOnlineUsers.TryAdd(arg.ClientId, new ExecutorClient()
+                {
+                    ServerId = guid,
+                    ClientId = arg.ClientId,
+                    GroupName = arg.UserProperties?.Where(x => x.Name == "GroupName").FirstOrDefault()?.Value,
+                    StartTime = DateTime.Now,
+                });
 
-            // 这个需要在任何节点订阅后，立即受到最后一次数据
-            var applicationMessage = new MqttApplicationMessageBuilder()
-                .WithTopic($"cluster/clients/change/{guid}")
-                .WithPayload(System.Text.Json.JsonSerializer.Serialize(CurrentNodeOnlineUsers))
-                .WithRetainFlag(true)
-                .Build();
+                // 这个需要在任何节点订阅后，立即受到最后一次数据
+                var applicationMessage = new MqttApplicationMessageBuilder()
+                    .WithTopic($"server/from/{guid}/clients-change")
+                    .WithPayload(System.Text.Json.JsonSerializer.Serialize(CurrentNodeOnlineUsers.Select(x => x.Value)))
+                    .WithRetainFlag(true)
+                    .Build();
 
-            await selfSubscriber.PublishAsync(applicationMessage);
+                await selfSubscriber.PublishAsync(applicationMessage);
+            }
+            else
+            {
+                logger.Publish(MqttNetLogLevel.Info, nameof(MqttServer_ClientConnectedAsync), $"服务端订阅当前节点 {arg.ClientId}", null, null);
+                // 暂时用不到
+            }
         }
 
         public async Task StopAsync()

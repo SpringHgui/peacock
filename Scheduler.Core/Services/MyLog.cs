@@ -13,7 +13,7 @@ namespace Scheduler.Core.Services
             switch (logLevel)
             {
                 case MqttNetLogLevel.Verbose:
-                    Log.Verbose(message);
+                    //Log.Verbose(message);
                     break;
                 case MqttNetLogLevel.Info:
                     Log.Information(message);

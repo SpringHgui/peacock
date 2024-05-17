@@ -54,7 +54,7 @@ namespace Scheduler.Master.Services
                     return (false, result);
                 }
 
-                groupClients = groupClients.Where(x => x.Handelrs.Contains(job.Content)).ToList();
+                groupClients = groupClients.Where(x => x.Handelrs != null && x.Handelrs.Contains(job.Content)).ToList();
                 logger.LogInformation($"{groupClients.Count()}个执行节点支持 {job.Content}");
 
                 if (!groupClients.Any())
@@ -150,8 +150,9 @@ namespace Scheduler.Master.Services
 
                     if (executor.ServerId == server.myMqttServer.guid)
                     {
+                        logger.LogInformation($"工作节点在当前服务器");
                         var applicationMessage = new MqttApplicationMessageBuilder()
-                           .WithTopic($"client/{executor.ClientId}/onjob")
+                           .WithTopic($"client/to/{executor.ClientId}/onjob")
                            .WithPayload(JsonSerializer.Serialize(new OnJob
                            {
                                Job = new JobInfo
@@ -177,12 +178,14 @@ namespace Scheduler.Master.Services
                     }
                     else
                     {
+                        logger.LogInformation($"工作节点在 {executor.ServerId} 开始发送转发主题");
+
                         // 转发到对应server进行
                         var applicationMessage = new MqttApplicationMessageBuilder()
-                           .WithTopic($"server/{executor.ServerId}/proxy")
+                           .WithTopic($"server/from/{server.myMqttServer.guid}/proxy")
                            .WithPayload(JsonSerializer.Serialize(new ProxyModel
                            {
-                               topic = $"client/{executor.ClientId}/onjob",
+                               topic = $"client/to/{executor.ClientId}/onjob",
                                data = JsonSerializer.Serialize(new OnJob
                                {
                                    Job = new JobInfo

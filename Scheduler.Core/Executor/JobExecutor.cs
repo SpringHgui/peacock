@@ -65,7 +65,8 @@ namespace Scheduler.Core.Executor
                     Server = schedulerOptions.Addr.First().Split(':')[0]
                 },
                 UserProperties = new List<MQTTnet.Packets.MqttUserProperty>() {
-                    new MQTTnet.Packets.MqttUserProperty("GroupName", schedulerOptions.GroupName)
+                    new MQTTnet.Packets.MqttUserProperty("GroupName", schedulerOptions.GroupName),
+                    new MQTTnet.Packets.MqttUserProperty("from", "client")
                 },
                 // TODO: 账号通过算法生产
                 //Credentials = new MqttClientCredentials("", Encoding.UTF8.GetBytes(schedulerOptions.Token)),
@@ -115,12 +116,12 @@ namespace Scheduler.Core.Executor
             client.ConnectedAsync += async e =>
             {
                 // 
-                  serverGuid = e.ConnectResult.UserProperties.First(x => x.Name == "server").Value;
+                serverGuid = e.ConnectResult.UserProperties.First(x => x.Name == "server").Value;
 
-                await client.SubscribeAsync($"client/{ClientId}/#");
+                await client.SubscribeAsync($"client/to/{ClientId}/#");
 
                 var applicationMessage = new MqttApplicationMessageBuilder()
-                    .WithTopic($"server/{serverGuid}/SyncHandlers")
+                    .WithTopic($"client/from/{ClientId}/SyncHandlers")
                     .WithUserProperty("id", ClientId)
                     .WithPayload(JsonSerializer.Serialize(schedulerConfig.jobs.Select(x => x.Key)))
                     .Build();
@@ -251,7 +252,7 @@ namespace Scheduler.Core.Executor
             }
 
             var message = new MqttApplicationMessageBuilder()
-                .WithTopic($"server/{serverGuid}/job_reslut")
+                .WithTopic($"client/from/{ClientId}/job_reslut")
                 .WithPayload(JsonSerializer.Serialize(msg))
                 .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
                 .Build();

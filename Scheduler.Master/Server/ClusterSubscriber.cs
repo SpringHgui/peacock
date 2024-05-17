@@ -49,6 +49,10 @@ namespace Scheduler.Master.Server
                 WillTopic = willTopic,
                 WillDelayInterval = 5,
                 WillPayload = Encoding.UTF8.GetBytes($"Offline"),
+                UserProperties =
+                new List<MQTTnet.Packets.MqttUserProperty>() {
+                    new MQTTnet.Packets.MqttUserProperty("from", "server")
+                }
             };
 
             client = factory.CreateMqttClient();
@@ -70,7 +74,7 @@ namespace Scheduler.Master.Server
                 Console.WriteLine($"+ QoS = {e.ApplicationMessage.QualityOfServiceLevel}");
                 Console.WriteLine($"+ Retain = {e.ApplicationMessage.Retain}");
                 Console.WriteLine();
-                if (e.ApplicationMessage.Topic.StartsWith("cluster/clients/change/"))
+                if (e.ApplicationMessage.Topic.EndsWith("clients-change"))
                 {
                     var clients = JsonSerializer.Deserialize<List<ExecutorClient>>(payloadText);
                     if (clients == null)
@@ -86,9 +90,22 @@ namespace Scheduler.Master.Server
 
                     OnClientsChange?.Invoke(clients, nodeInfo);
                 }
+                else if (e.ApplicationMessage.Topic.EndsWith("proxy"))
+                {
+                    var proxy = JsonSerializer.Deserialize<ProxyModel>(payloadText);
+                    if (proxy == null)
+                        throw new Exception("解析失败");
+
+                    var applicationMessage = new MqttApplicationMessageBuilder()
+                      .WithTopic(proxy.topic)
+                      .WithPayload(proxy.data)
+                    .Build();
+
+                    var res = mqttServer.selfSubscriber.PublishAsync(applicationMessage).Result;
+                }
                 else
                 {
-                    Console.WriteLine("未处理的处主题");
+                    Console.WriteLine("ClusterSubscriber 未处理的处主题");
                 }
 
                 return Task.CompletedTask;
@@ -96,8 +113,7 @@ namespace Scheduler.Master.Server
 
             client.ConnectedAsync += async e =>
             {
-                await client.SubscribeAsync("cluster/clients/change/" + Guid);
-                await client.SubscribeAsync("cluster/proxy/" + Guid);
+                await client.SubscribeAsync($"server/from/{Guid}/#");
                 Console.WriteLine($"[{mqttServer.guid}] 连接成功 {nodeInfo.Guid}");
             };
 

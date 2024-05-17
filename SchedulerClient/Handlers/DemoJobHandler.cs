@@ -14,7 +14,7 @@ namespace Scheduler.Client.Handlers
         {
             Console.WriteLine($"执行参数：{context.JobInfo.JobParams}");
             Console.WriteLine("DemoJob");
-            Thread.Sleep(20000);
+            Thread.Sleep(2000);
         }
     }
 }

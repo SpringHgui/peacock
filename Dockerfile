@@ -2,14 +2,14 @@
 FROM node:18.16-slim AS node
 WORKDIR /app
 COPY ["ui/vue-scheduler", "./"]
+RUN npm config set registry https://registry.npmmirror.com
 RUN npm i
 RUN npm run build
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
-EXPOSE 80
+EXPOSE 8080
 EXPOSE 1883
-EXPOSE 443
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src

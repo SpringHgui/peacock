@@ -22,8 +22,6 @@ namespace Scheduler.Master.Services
 
         protected override Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            logger.LogInformation($"服务启动：{GetHashCode()}");
-
             return Task.Run(() =>
             {
                 schedulerService.Start(stoppingToken);

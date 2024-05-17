@@ -11,12 +11,15 @@ using Scheduler.Master.Server;
 using Scheduler.Master.Services;
 using Serilog;
 using Serilog.Events;
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace Scheduler.Master
 {
     public class Program
     {
+        public static ConcurrentBag<ExecutorClient> CurrentNodeOnlineUsers = new ConcurrentBag<ExecutorClient>();
+
         public static void Main(string[] args)
         {
             const string outputTemplate = "[{Timestamp:HH:mm:ss} {RequestId} {Level:u3}] {Message:lj}{NewLine}{Exception}";
@@ -25,13 +28,14 @@ namespace Scheduler.Master
             var configuration = builder.Configuration;
 
             builder.Services.AddSerilog((config) =>
-            {
-                config.MinimumLevel.Debug()
-                    .MinimumLevel.Override("Microsoft", LogEventLevel.Information) // Microsoft.Hosting.Lifetime
-                    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Error)
-                    .WriteTo.File("logs/.log", outputTemplate: outputTemplate, rollingInterval: RollingInterval.Hour, shared: true)
-                    .WriteTo.Console(outputTemplate: outputTemplate);
-            });
+                {
+                    config.MinimumLevel.Debug()
+                        .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+                        .MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information) // Microsoft.Hosting.Lifetime
+                        .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Error)
+                        .WriteTo.File("logs/.log", outputTemplate: outputTemplate, rollingInterval: RollingInterval.Hour, shared: true)
+                        .WriteTo.Console(outputTemplate: outputTemplate);
+                });
 
             builder.Services.AddAuthentication("Bearer").AddJwtBearer(delegate (JwtBearerOptions options)
             {

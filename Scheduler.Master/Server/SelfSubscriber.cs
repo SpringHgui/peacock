@@ -15,6 +15,10 @@ using Scheduler.Master.Models;
 
 namespace Scheduler.Master.Server
 {
+    /// <summary>
+    /// 1. 像客户端一样订阅自己，以实现客户端与自己进行通信
+    /// 2. 其他server节点与当前节点通信
+    /// </summary>
     public class SelfSubscriber
     {
         MyMqttServer mqttServer;
@@ -72,9 +76,26 @@ namespace Scheduler.Master.Server
                 switch (topic)
                 {
                     case "SyncHandlers":
-                        var id = e.ApplicationMessage.UserProperties?.First(x => x.Name == "id").Value;
-                        var data = JsonSerializer.Deserialize<string[]>(payloadText);
-                        mqttServer.CurrentNodeOnlineUsers.First(x => x.ClientId == id).Handelrs = data;
+                        var id = e.ApplicationMessage.UserProperties?.First(x => x.Name == "id").Value ?? throw new ArgumentNullException();
+                        var data = JsonSerializer.Deserialize<string[]>(payloadText) ?? throw new ArgumentNullException();
+                        if (mqttServer.CurrentNodeOnlineUsers.TryGetValue(id, out var client))
+                        {
+                            client.Handelrs = data;
+
+                            // 这个需要在任何节点订阅后，立即受到最后一次数据
+                            var msg = new MqttApplicationMessageBuilder()
+                                .WithTopic($"server/from/{myMqttServer.guid}/clients-change")
+                                .WithPayload(JsonSerializer.Serialize(myMqttServer.CurrentNodeOnlineUsers.Select(x => x.Value)))
+                                .WithRetainFlag(true)
+                                .Build();
+
+                            PublishAsync(msg);
+                        }
+                        else
+                        {
+                            logger.Publish(MqttNetLogLevel.Error, "SyncHandlers", $"未找到对应客户端 {id}", null, null);
+                        }
+
                         break;
                     case "job_reslut":
                         var onJob = JsonSerializer.Deserialize<OnJob>(payloadText);
@@ -162,10 +183,10 @@ namespace Scheduler.Master.Server
                           .WithPayload(proxy.data)
                         .Build();
 
-                        var res = PublishAsync(applicationMessage).Result;
+                        var res = mqttServer.selfSubscriber.PublishAsync(applicationMessage).Result;
                         break;
                     default:
-                        break;
+                        throw new Exception("self 未知的主题");
                 }
 
                 return Task.CompletedTask;
@@ -173,8 +194,10 @@ namespace Scheduler.Master.Server
 
             client.ConnectedAsync += async e =>
             {
-                await client.SubscribeAsync($"server/{mqttServer.guid}/#");
-                Console.WriteLine($"[{mqttServer.guid}] 连接成功");
+                // server/316bc382-e64d-4ce6-a82e-c3c535974074/proxy
+                var topic = $"client/from/+/#";
+                await client.SubscribeAsync(topic);
+                Console.WriteLine($"[订阅自己成功] {topic}");
             };
 
             client.DisconnectedAsync += async e =>
