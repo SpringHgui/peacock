@@ -11,6 +11,10 @@ using System.Collections.Concurrent;
 using Google.Protobuf.WellKnownTypes;
 using System.Xml.Linq;
 using Microsoft.Win32;
+using System.Threading.Tasks;
+using Org.BouncyCastle.Asn1.Cms;
+using Microsoft.IdentityModel.Logging;
+using MySqlX.XDevAPI;
 
 namespace Scheduler.Master.Server
 {
@@ -22,17 +26,39 @@ namespace Scheduler.Master.Server
         public string guid;
 
         IMqttNetLogger logger;
-
-        IEnumerable<MqttNode> mqttNodes;
         public SelfSubscriber selfSubscriber;
-        public ConcurrentBag<ExecutorClient> OnlineUsers = new ConcurrentBag<ExecutorClient>();
+        public ConcurrentBag<ExecutorClient> CurrentNodeOnlineUsers = new ConcurrentBag<ExecutorClient>();
+
+        public IEnumerable<ExecutorClient> GetAllClientsOnline()
+        {
+            IEnumerable<ExecutorClient> clients = CurrentNodeOnlineUsers;
+            foreach (var item in OtherNodeOlineUsers)
+            {
+                clients = clients.Concat(item.Value);
+            }
+
+            return clients;
+        }
+
+        public IEnumerable<ExecutorClient> GetClientsByAppName(string appname)
+        {
+            var clients = CurrentNodeOnlineUsers.Where(x => x.GroupName == appname);
+            foreach (var item in OtherNodeOlineUsers)
+            {
+                clients = clients.Concat(item.Value.Where(x => x.GroupName == appname));
+            }
+
+            return clients;
+        }
+
+        public ConcurrentDictionary<string, IEnumerable<ExecutorClient>> OtherNodeOlineUsers = new ConcurrentDictionary<string, IEnumerable<ExecutorClient>>();
         IServiceProvider serviceProvider;
 
         public (int Start, int End) Slot { get; private set; }
 
         public string ExternalUrl => options.ExternalUrl ?? $"{options.Ip}:{options.Port}";
 
-        public IList<ClusterSubscriber> clusterSubscribers = new List<ClusterSubscriber>();
+        public ConcurrentDictionary<string, ClusterSubscriber> clusterSubscribers = new ConcurrentDictionary<string, ClusterSubscriber>();
 
         public MyMqttServer(MyMqttServerOptions options, IDiscovery discovery, IMqttNetLogger logger, IServiceProvider serviceProvider)
         {
@@ -231,39 +257,59 @@ namespace Scheduler.Master.Server
             }
 
             var sub = new ClusterSubscriber(node, this);
-            this.clusterSubscribers.Add(sub);
+            sub.OnClientsChange += OnClientsChange;
+            this.clusterSubscribers.TryAdd(sub.Guid, sub);
             await sub.StartAsync();
+        }
+
+        // 
+        private void OnClientsChange(IEnumerable<ExecutorClient> clients, MqttNode nodeInfo)
+        {
+            logger.Publish(MqttNetLogLevel.Info, nameof(OnClientsChange), $"客户端变化：{nodeInfo.Guid} {clients.Count()}", null, null);
+            OtherNodeOlineUsers.TryAdd(nodeInfo.Guid, clients);
         }
 
         private async Task Discovery_OnNodeDisconnected(MqttNode node)
         {
-            var clusterSubscriber = clusterSubscribers.Where(x => x.Guid == node.Guid).First();
-            await clusterSubscriber.StopAsync();
-
-            this.clusterSubscribers.Remove(clusterSubscriber);
+            if (clusterSubscribers.Remove(node.Guid, out ClusterSubscriber? subscriber))
+            {
+                await subscriber.StopAsync();
+            }
         }
 
-        private Task MqttServer_ClientDisconnectedAsync(ClientDisconnectedEventArgs arg)
+        private async Task MqttServer_ClientDisconnectedAsync(ClientDisconnectedEventArgs arg)
         {
-            var clinet = OnlineUsers.FirstOrDefault(x => x.ClientId == arg.ClientId);
+            var clinet = CurrentNodeOnlineUsers.FirstOrDefault(x => x.ClientId == arg.ClientId);
             if (clinet != null)
             {
-                OnlineUsers.TryTake(out clinet);
+                CurrentNodeOnlineUsers.TryTake(out clinet);
             }
 
-            return Task.CompletedTask;
+            var applicationMessage = new MqttApplicationMessageBuilder()
+                .WithTopic($"cluster/clients/change/{guid}")
+                .WithPayload(System.Text.Json.JsonSerializer.Serialize(CurrentNodeOnlineUsers))
+                .Build();
+
+            await selfSubscriber.PublishAsync(applicationMessage);
         }
 
-        private Task MqttServer_ClientConnectedAsync(ClientConnectedEventArgs arg)
+        private async Task MqttServer_ClientConnectedAsync(ClientConnectedEventArgs arg)
         {
-            OnlineUsers.Add(new ExecutorClient()
+            CurrentNodeOnlineUsers.Add(new ExecutorClient()
             {
                 ClientId = arg.ClientId,
                 GroupName = arg.UserProperties?.Where(x => x.Name == "GroupName").FirstOrDefault()?.Value,
                 StartTime = DateTime.Now,
             });
 
-            return Task.CompletedTask;
+            // 这个需要在任何节点订阅后，立即受到最后一次数据
+            var applicationMessage = new MqttApplicationMessageBuilder()
+                .WithTopic($"cluster/clients/change/{guid}")
+                .WithPayload(System.Text.Json.JsonSerializer.Serialize(CurrentNodeOnlineUsers))
+                .WithRetainFlag(true)
+                .Build();
+
+            await selfSubscriber.PublishAsync(applicationMessage);
         }
 
         public async Task StopAsync()

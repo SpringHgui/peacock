@@ -9,6 +9,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Scheduler.Entity.Models;
 using Scheduler.Service;
 using System;
+using Microsoft.AspNetCore.Hosting.Server;
+using System.Threading.Tasks;
+using Scheduler.Master.Models;
 
 namespace Scheduler.Master.Server
 {
@@ -20,7 +23,7 @@ namespace Scheduler.Master.Server
         IServiceProvider serviceProvider;
 
         public SelfSubscriber(MyMqttServer myMqttServer, IServiceProvider serviceProvider)
-        { 
+        {
             this.mqttServer = myMqttServer;
             this.serviceProvider = serviceProvider;
             var logger = new MqttNetEventLogger();
@@ -65,13 +68,13 @@ namespace Scheduler.Master.Server
                 Console.WriteLine();
 
                 var topic = e.ApplicationMessage.Topic.Split("/").Last();
-          
+
                 switch (topic)
                 {
                     case "SyncHandlers":
                         var id = e.ApplicationMessage.UserProperties?.First(x => x.Name == "id").Value;
                         var data = JsonSerializer.Deserialize<string[]>(payloadText);
-                        mqttServer.OnlineUsers.First(x => x.ClientId == id).Handelrs = data;
+                        mqttServer.CurrentNodeOnlineUsers.First(x => x.ClientId == id).Handelrs = data;
                         break;
                     case "job_reslut":
                         var onJob = JsonSerializer.Deserialize<OnJob>(payloadText);
@@ -119,13 +122,13 @@ namespace Scheduler.Master.Server
                             //                {
                             //                    var text = $"""
                             //        任务调度平台/调度失败提醒
-                        
+
                             //        任务名称：{job.GroupName}/{job.Name}
                             //        调度实例：TaskId：{onJob.Job.TaskId}
                             //        危险级别：{"高"}
                             //        提醒时间：{DateTime.Now.ToString("MM-dd HH:mm:ss")}
                             //        详细内容：{onJob.ErrMsg}
-                        
+
                             //        请值班研发人员查看失败原因，及时处理！
                             //        """;
 
@@ -148,6 +151,18 @@ namespace Scheduler.Master.Server
                             //    }
                             //}
                         }
+                        break;
+                    case "proxy":
+                        var proxy = JsonSerializer.Deserialize<ProxyModel>(payloadText);
+                        if (proxy == null)
+                            throw new Exception("解析失败");
+
+                        var applicationMessage = new MqttApplicationMessageBuilder()
+                          .WithTopic(proxy.topic)
+                          .WithPayload(proxy.data)
+                        .Build();
+
+                        var res = PublishAsync(applicationMessage).Result;
                         break;
                     default:
                         break;
@@ -178,9 +193,9 @@ namespace Scheduler.Master.Server
             };
         }
 
-        public async Task PublishAsync(MqttApplicationMessage applicationMessage, CancellationToken cancellationToken = default(CancellationToken))
+        public async Task<MqttClientPublishResult> PublishAsync(MqttApplicationMessage applicationMessage, CancellationToken cancellationToken = default(CancellationToken))
         {
-            await client.PublishAsync(applicationMessage, CancellationToken.None);
+            return await client.PublishAsync(applicationMessage, CancellationToken.None);
         }
 
         public async Task StartAsync()

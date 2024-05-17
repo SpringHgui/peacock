@@ -6,6 +6,8 @@ using MQTTnet.Server;
 using System.Text;
 using Microsoft.AspNetCore.Hosting.Server;
 using System.Threading.Channels;
+using System.Text.Json;
+using Scheduler.Master.Models;
 
 namespace Scheduler.Master.Server
 {
@@ -19,7 +21,10 @@ namespace Scheduler.Master.Server
         public string Guid => nodeInfo.Guid;
 
         string willTopic => $"sys/cluster/offline/{Guid}";
- 
+
+        public event ClientsChange OnClientsChange;
+        public delegate void ClientsChange(IEnumerable<ExecutorClient> clients, MqttNode nodeInfo);
+
         public ClusterSubscriber(MqttNode nodeInfo, MyMqttServer mqttServer)
         {
             this.nodeInfo = nodeInfo;
@@ -65,14 +70,34 @@ namespace Scheduler.Master.Server
                 Console.WriteLine($"+ QoS = {e.ApplicationMessage.QualityOfServiceLevel}");
                 Console.WriteLine($"+ Retain = {e.ApplicationMessage.Retain}");
                 Console.WriteLine();
+                if (e.ApplicationMessage.Topic.StartsWith("cluster/clients/change/"))
+                {
+                    var clients = JsonSerializer.Deserialize<List<ExecutorClient>>(payloadText);
+                    if (clients == null)
+                    {
+                        throw new Exception("解析客户端列表失败");
+                    }
+
+                    // 在这里赋值，减少重复的数据通过网络传输
+                    foreach (var item in clients)
+                    {
+                        item.ServerId = nodeInfo.Guid;
+                    }
+
+                    OnClientsChange?.Invoke(clients, nodeInfo);
+                }
+                else
+                {
+                    Console.WriteLine("未处理的处主题");
+                }
 
                 return Task.CompletedTask;
             };
 
             client.ConnectedAsync += async e =>
             {
-                await client.SubscribeAsync("sys/cluster/clients/" + Guid);
-                await client.SubscribeAsync("sys/cluster/proxy/" + Guid);
+                await client.SubscribeAsync("cluster/clients/change/" + Guid);
+                await client.SubscribeAsync("cluster/proxy/" + Guid);
                 Console.WriteLine($"[{mqttServer.guid}] 连接成功 {nodeInfo.Guid}");
             };
 

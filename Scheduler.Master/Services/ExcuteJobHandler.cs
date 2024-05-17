@@ -42,7 +42,7 @@ namespace Scheduler.Master.Services
             {
                 var taskService = scope.ServiceProvider.GetRequiredService<TaskService>();
 
-                var groupClients = server.myMqttServer.OnlineUsers.Where(x => x.GroupName == job.GroupName).ToList();
+                var groupClients = server.myMqttServer.GetClientsByAppName(job.GroupName).ToList();
                 if (!groupClients.Any())
                 {
                     var result = $"组[{job.GroupName}]没有在线的执行器";
@@ -143,29 +143,66 @@ namespace Scheduler.Master.Services
 
                     jobService.UpdateParallelCount(job.JobId, +1);
 
-                    var applicationMessage = new MqttApplicationMessageBuilder()
-                       .WithTopic($"client/{executor.ClientId}/onjob")
-                       .WithPayload(JsonSerializer.Serialize(new OnJob
-                       {
-                           Job = new JobInfo
+                    if (executor.ServerId == server.myMqttServer.guid)
+                    {
+                        var applicationMessage = new MqttApplicationMessageBuilder()
+                           .WithTopic($"client/{executor.ClientId}/onjob")
+                           .WithPayload(JsonSerializer.Serialize(new OnJob
                            {
-                               TaskId = task.TaskId,
-                               Name = job.Name,
-                               GroupName = job.GroupName,
-                               TimeExpression = job.TimeExpression,
-                               TimeType = job.TimeType,
-                               MaxAttempt = job.MaxAttempt,
-                               AttemptInterval = job.AttemptInterval,
-                               Content = job.Content,
-                               Description = job.Description,
-                               ExecuteMode = job.ExecuteMode,
-                               JobId = job.JobId,
-                               JobParams = job.JobParams
-                           }
-                       }))
-                       .Build();
+                               Job = new JobInfo
+                               {
+                                   TaskId = task.TaskId,
+                                   Name = job.Name,
+                                   GroupName = job.GroupName,
+                                   TimeExpression = job.TimeExpression,
+                                   TimeType = job.TimeType,
+                                   MaxAttempt = job.MaxAttempt,
+                                   AttemptInterval = job.AttemptInterval,
+                                   Content = job.Content,
+                                   Description = job.Description,
+                                   ExecuteMode = job.ExecuteMode,
+                                   JobId = job.JobId,
+                                   JobParams = job.JobParams
+                               }
+                           }))
+                           .Build();
 
-                    await server.myMqttServer.selfSubscriber.PublishAsync(applicationMessage);
+                        await server.myMqttServer.selfSubscriber.PublishAsync(applicationMessage);
+                        taskService.UpdateTaskFlag(task.TaskId, ScTaskStatus.Process);
+                    }
+                    else
+                    {
+                        // 转发到对应server进行
+                        var applicationMessage = new MqttApplicationMessageBuilder()
+                           .WithTopic($"server/{executor.ServerId}/proxy")
+                           .WithPayload(JsonSerializer.Serialize(new ProxyModel
+                           {
+                               topic = $"client/{executor.ClientId}/onjob",
+                               data = JsonSerializer.Serialize(new OnJob
+                               {
+                                   Job = new JobInfo
+                                   {
+                                       TaskId = task.TaskId,
+                                       Name = job.Name,
+                                       GroupName = job.GroupName,
+                                       TimeExpression = job.TimeExpression,
+                                       TimeType = job.TimeType,
+                                       MaxAttempt = job.MaxAttempt,
+                                       AttemptInterval = job.AttemptInterval,
+                                       Content = job.Content,
+                                       Description = job.Description,
+                                       ExecuteMode = job.ExecuteMode,
+                                       JobId = job.JobId,
+                                       JobParams = job.JobParams
+                                   }
+                               })
+                           }
+                          ))
+                           .Build();
+
+                        await server.myMqttServer.selfSubscriber.PublishAsync(applicationMessage);
+                    }
+
                     taskService.UpdateTaskFlag(task.TaskId, ScTaskStatus.Process);
                 }
 

@@ -2,6 +2,8 @@
 {
     public class ExecutorClient
     {
+        public string ServerId { get; set; }
+
         public string GroupName { get; set; }
 
         public string ConnectionId { get; set; }

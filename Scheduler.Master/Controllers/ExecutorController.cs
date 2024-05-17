@@ -19,7 +19,7 @@ namespace Scheduler.Master.Controllers
         [HttpGet]
         public ResultData GetOnlineExecutor([FromServices] ServerSystem mqttServer)
         {
-            ResultData.data = mqttServer.myMqttServer.OnlineUsers.Select(x => new
+            ResultData.data = mqttServer.myMqttServer.GetAllClientsOnline().Select(x => new
             {
                 StartTime = x.StartTime.ToString("yyyy-MM-dd HH:mm:ss"),
                 x.ClientId,

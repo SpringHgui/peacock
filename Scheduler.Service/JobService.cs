@@ -19,6 +19,7 @@ namespace Scheduler.Service
             DBContext.SaveChanges();
 
             // todo:更新slot
+            // slot = crc16(id) & 16383
             return ddd.Entity;
         }
 
