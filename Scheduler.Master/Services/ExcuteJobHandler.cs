@@ -43,6 +43,7 @@ namespace Scheduler.Master.Services
                 var taskService = scope.ServiceProvider.GetRequiredService<TaskService>();
 
                 var groupClients = server.myMqttServer.GetClientsByAppName(job.GroupName).ToList();
+                logger.LogInformation($"找到{groupClients.Count()}个 {job.GroupName} 的执行节点 ");
                 if (!groupClients.Any())
                 {
                     var result = $"组[{job.GroupName}]没有在线的执行器";
@@ -54,6 +55,8 @@ namespace Scheduler.Master.Services
                 }
 
                 groupClients = groupClients.Where(x => x.Handelrs.Contains(job.Content)).ToList();
+                logger.LogInformation($"{groupClients.Count()}个执行节点支持 {job.Content}");
+
                 if (!groupClients.Any())
                 {
                     var result = $"组[{job.GroupName}]没有支持`{job.Content}`的执行器";
@@ -120,6 +123,8 @@ namespace Scheduler.Master.Services
                 {
                     throw new Exception($"运行模式参数异常: 未知的模式{job.ExecuteMode}");
                 }
+
+                logger.LogInformation($"以下节点需要下发通知 {JsonSerializer.Serialize(executors)}");
 
                 foreach (var executor in executors)
                 {

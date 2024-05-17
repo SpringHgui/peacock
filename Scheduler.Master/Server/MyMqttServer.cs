@@ -92,7 +92,7 @@ namespace Scheduler.Master.Server
 
                 mqttServer = new MqttFactory().CreateMqttServer(mqttServerOptions, logger);
 
-                const string Filename = "C:\\MQTT\\RetainedMessages.json";
+                string Filename = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "RetainedMessages.json");
 
                 mqttServer.RetainedMessageChangedAsync += e =>
                 {
@@ -104,7 +104,15 @@ namespace Scheduler.Master.Server
                         Directory.CreateDirectory(directory);
                     }
 
-                    File.WriteAllText(Filename, JsonConvert.SerializeObject(e.StoredRetainedMessages));
+                    if (e.StoredRetainedMessages != null)
+                    {
+                        File.WriteAllText(Filename, JsonConvert.SerializeObject(e.StoredRetainedMessages.Where(x => x.PayloadSegment != null)));
+                    }
+                    else
+                    {
+                        File.Delete(Filename);
+                    }
+
                     return CompletedTask.Instance;
                 };
 
@@ -138,18 +146,18 @@ namespace Scheduler.Master.Server
                 mqttServer.InterceptingPublishAsync += e =>
                 {
                     Console.Write($"[InterceptingPublish] 1");
-                    if (MqttTopicFilterComparer.Compare(e.ApplicationMessage.Topic, "/myTopic/WithTimestamp/#") == MqttTopicFilterCompareResult.IsMatch)
-                    {
-                        // Replace the payload with the timestamp. But also extending a JSON 
-                        // based payload with the timestamp is a suitable use case.
-                        e.ApplicationMessage.PayloadSegment = new ArraySegment<byte>(Encoding.UTF8.GetBytes(DateTime.Now.ToString("O")));
-                    }
+                    //if (MqttTopicFilterComparer.Compare(e.ApplicationMessage.Topic, "/myTopic/WithTimestamp/#") == MqttTopicFilterCompareResult.IsMatch)
+                    //{
+                    //    // Replace the payload with the timestamp. But also extending a JSON 
+                    //    // based payload with the timestamp is a suitable use case.
+                    //    e.ApplicationMessage.PayloadSegment = new ArraySegment<byte>(Encoding.UTF8.GetBytes(DateTime.Now.ToString("O")));
+                    //}
 
-                    if (e.ApplicationMessage.Topic == "not_allowed_topic")
-                    {
-                        e.ProcessPublish = false;
-                        e.CloseConnection = true;
-                    }
+                    //if (e.ApplicationMessage.Topic == "not_allowed_topic")
+                    //{
+                    //    e.ProcessPublish = false;
+                    //    e.CloseConnection = true;
+                    //}
 
                     return CompletedTask.Instance;
                 };
@@ -279,10 +287,18 @@ namespace Scheduler.Master.Server
 
         private async Task MqttServer_ClientDisconnectedAsync(ClientDisconnectedEventArgs arg)
         {
+            logger.Publish(MqttNetLogLevel.Info, nameof(MqttServer_ClientConnectedAsync), $"客户端离线 {arg.ClientId}", null, null);
             var clinet = CurrentNodeOnlineUsers.FirstOrDefault(x => x.ClientId == arg.ClientId);
             if (clinet != null)
             {
-                CurrentNodeOnlineUsers.TryTake(out clinet);
+                if (CurrentNodeOnlineUsers.TryTake(out clinet))
+                {
+                    logger.Publish(MqttNetLogLevel.Info, nameof(MqttServer_ClientConnectedAsync), $"客户端移除成功", null, null);
+                }
+                else
+                {
+                    logger.Publish(MqttNetLogLevel.Error, nameof(MqttServer_ClientConnectedAsync), $"客户端未找到", null, null);
+                }
             }
 
             var applicationMessage = new MqttApplicationMessageBuilder()
@@ -295,8 +311,10 @@ namespace Scheduler.Master.Server
 
         private async Task MqttServer_ClientConnectedAsync(ClientConnectedEventArgs arg)
         {
+            logger.Publish(MqttNetLogLevel.Info, nameof(MqttServer_ClientConnectedAsync), $"客户端上线 {arg.ClientId}", null, null);
             CurrentNodeOnlineUsers.Add(new ExecutorClient()
             {
+                ServerId = guid,
                 ClientId = arg.ClientId,
                 GroupName = arg.UserProperties?.Where(x => x.Name == "GroupName").FirstOrDefault()?.Value,
                 StartTime = DateTime.Now,

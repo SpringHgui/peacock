@@ -1,7 +1,10 @@
-﻿namespace Scheduler.Master.Models
+﻿using System.Text.Json.Serialization;
+
+namespace Scheduler.Master.Models
 {
     public class ExecutorClient
     {
+        [JsonIgnore]
         public string ServerId { get; set; }
 
         public string GroupName { get; set; }

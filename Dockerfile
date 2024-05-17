@@ -1,13 +1,14 @@
 #See https://aka.ms/customizecontainer to learn how to customize your debug container and how Visual Studio uses this Dockerfile to build your images for faster debugging.
-#FROM node:18.16-slim AS node
-#WORKDIR /app
-#COPY ["ui/vue-scheduler", "./"]
-#RUN npm i
-#RUN npm run build
+FROM node:18.16-slim AS node
+WORKDIR /app
+COPY ["ui/vue-scheduler", "./"]
+RUN npm i
+RUN npm run build
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
 EXPOSE 80
+EXPOSE 1883
 EXPOSE 443
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
@@ -26,5 +27,5 @@ RUN dotnet publish "Scheduler.Master.csproj" -c Release -o /app/publish /p:UseAp
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-#COPY --from=node /app/dist ./wwwroot
+COPY --from=node /app/dist ./wwwroot
 ENTRYPOINT ["dotnet", "Scheduler.Master.dll"]
