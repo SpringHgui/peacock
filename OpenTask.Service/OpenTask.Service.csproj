@@ -11,7 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Scheduler.Entity\Scheduler.Entity.csproj" />
+    <ProjectReference Include="..\OpenTask.Entity\OpenTask.Entity.csproj" />
   </ItemGroup>
 
 </Project>

@@ -37,12 +37,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\Scheduler.Core\Scheduler.Core.csproj" />
-		<ProjectReference Include="..\Scheduler.Service\Scheduler.Service.csproj" />
+		<Folder Include="wwwroot\" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<Folder Include="wwwroot\" />
+	  <ProjectReference Include="..\OpenTask.Core\OpenTask.Core.csproj" />
+	  <ProjectReference Include="..\OpenTask.Service\OpenTask.Service.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
