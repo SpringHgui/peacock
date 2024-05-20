@@ -1,7 +1,7 @@
 #See https://aka.ms/customizecontainer to learn how to customize your debug container and how Visual Studio uses this Dockerfile to build your images for faster debugging.
 FROM node:18.16-slim AS node
 WORKDIR /app
-COPY ["ui/vue-OpenTask", "./"]
+COPY ["ui/vue-opentask", "./"]
 RUN npm config set registry https://registry.npmmirror.com
 RUN npm i
 RUN npm run build
