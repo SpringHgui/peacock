@@ -79,7 +79,7 @@ namespace Scheduler.Master
             });
 
             builder.Services.AddHealthChecks();
-            builder.Services.AddAuthentication().AddMyAuthentication();
+            builder.Services.AddAuthentication();
 
             // Add services to the container.
             builder.Services.AddControllers().AddJsonOptions(options =>
